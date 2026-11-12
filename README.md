@@ -1,7 +1,4 @@
-# Sieve
-
-*Pre-render feed filtering and UI debloat for Firefox across YouTube, X, Instagram, and TikTok.*
-
+There is *sooo* much good content out there and its such a shame most rec algorithms are built to one shot you into a brain dead state. Here is an extension to help
 ---
 
 ## 1. Clone
