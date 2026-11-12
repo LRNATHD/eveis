@@ -79,14 +79,28 @@ function extractIgMedia(media: JsonRecord, surface: FeedSurface): FeedItem | nul
   };
 }
 
+function isInstagramProfileOrPermalink(pageUrl?: string): boolean {
+  if (!pageUrl) return false;
+  try {
+    const p = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
+    if (p === "/" || p === "/reels" || p.startsWith("/reels/")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function filterInstagramJson(
   data: unknown,
   urlPath: string,
   config: SieveConfig,
   decide: BatchDecider,
+  pageUrl?: string,
 ): Promise<unknown> {
   if (!config.enabled || !config.instagram.enabled) return data;
   if (!isRecord(data)) return data;
+
+  const onProfileOrPost = isInstagramProfileOrPermalink(pageUrl);
 
   interface MediaSlot {
     list: unknown[];
@@ -99,9 +113,15 @@ export async function filterInstagramJson(
 
   function processGraphqlConnection(connKey: string, conn: JsonRecord): void {
     if (!Array.isArray(conn.edges)) return;
+    const isUserProfileConn =
+      onProfileOrPost ||
+      connKey.includes("user") ||
+      (!connKey.includes("clips__home") && !connKey.includes("feed__timeline"));
     const isReels = connKey.includes("clips");
     const surface: FeedSurface = isReels ? "reels" : "timeline";
-    const filterActive = isReels ? config.instagram.filterReels : config.instagram.caliberFilter;
+    const filterActive =
+      !isUserProfileConn &&
+      (isReels ? config.instagram.filterReels : config.instagram.caliberFilter);
 
     const edges = conn.edges;
     const getMediaFromEdge = (edge: unknown): JsonRecord | null => {
@@ -122,20 +142,18 @@ export async function filterInstagramJson(
         i--;
         continue;
       }
-      if (!filterActive) continue;
       const item = extractIgMedia(media, surface);
-      if (item) {
-        candidates.set(item.id, item);
-        slots.push({
-          list: edges,
-          id: item.id,
-          getMediaId: (el) => {
-            const m = getMediaFromEdge(el);
-            const raw = m?.pk ?? m?.id ?? m?.code;
-            return raw != null ? String(raw) : "";
-          },
-        });
-      }
+      if (!filterActive || !item) continue;
+      candidates.set(item.id, item);
+      slots.push({
+        list: edges,
+        id: item.id,
+        getMediaId: (el) => {
+          const m = getMediaFromEdge(el);
+          const raw = m?.pk ?? m?.id ?? m?.code;
+          return raw != null ? String(raw) : "";
+        },
+      });
     }
   }
 

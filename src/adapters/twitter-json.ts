@@ -278,10 +278,17 @@ export async function filterTwitterJson(
   if (!config.enabled || !config.x.enabled) return data;
   if (!isRecord(data)) return data;
 
-  // Never delete organic tweets, quote tweets, or threads when the user clicks into a status page (/TweetDetail)
-  // or views their chronological Following tab (/HomeLatestTimeline). Only strip promoted ads there.
+  // Never delete organic posts when viewing a status/thread (/TweetDetail), a user profile (/User*),
+  // or the chronological Following tab (/HomeLatestTimeline). Only strip promoted ads and polish cards/titles there.
+  const isProfilePayload = isRecord(data.data) && isRecord(data.data.user);
   const isAdsOnlySurface =
-    urlPath.includes("/HomeLatestTimeline") || urlPath.includes("/TweetDetail");
+    isProfilePayload ||
+    urlPath.includes("/HomeLatestTimeline") ||
+    urlPath.includes("/TweetDetail") ||
+    urlPath.includes("/UserTweets") ||
+    urlPath.includes("/UserMedia") ||
+    urlPath.includes("/HighlightsTweets") ||
+    urlPath.includes("/Likes");
   const surface: FeedSurface = urlPath.includes("/SearchTimeline") ? "search" : "timeline";
 
   interface EntryRef {

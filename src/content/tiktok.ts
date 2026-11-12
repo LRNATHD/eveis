@@ -193,7 +193,12 @@ async function evaluateAndPolishFeedDom(): Promise<void> {
       }
     });
 
-  if (!activeConfig.tiktok.caliberFilter) return;
+  if (
+    !activeConfig.tiktok.caliberFilter ||
+    normalizeTikTokPath(window.location.pathname).startsWith("/@")
+  ) {
+    return;
+  }
 
   const cards = document.querySelectorAll<HTMLElement>(
     '[data-e2e="recommend-list-item-container"], article[data-scroll-index]',

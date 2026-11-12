@@ -35,15 +35,30 @@ export function rewriteTikTokThemeCookieHeader(cookieHeader: string): string {
   return updated.join("; ");
 }
 
+function isTikTokProfileOrDirectRoute(urlPath: string, pageUrl?: string): boolean {
+  if (urlPath.includes("/api/post/item_list")) return true;
+  if (!pageUrl) return false;
+  try {
+    const pathname = new URL(pageUrl).pathname;
+    return /(?:^|\/)@[^/]+/.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 export async function filterTikTokJson(
   data: unknown,
   config: SieveConfig,
   decide: BatchDecider,
+  urlPath = "",
+  pageUrl = "",
 ): Promise<unknown> {
   if (!config.enabled || !config.tiktok.enabled) return data;
   if (!isRecord(data) || !Array.isArray(data.itemList)) return data;
 
-  if (config.tiktok.postOnlyMode) {
+  const isProfileSurface = isTikTokProfileOrDirectRoute(urlPath, pageUrl);
+
+  if (config.tiktok.postOnlyMode && !isProfileSurface) {
     data.itemList = [];
     return data;
   }
@@ -65,7 +80,7 @@ export async function filterTikTokJson(
       raw.desc = calmTitle(raw.desc);
     }
 
-    if (!config.tiktok.caliberFilter) continue;
+    if (!config.tiktok.caliberFilter || isProfileSurface) continue;
 
     const id = typeof raw.id === "string" ? raw.id : "";
     if (!id) continue;
@@ -91,7 +106,7 @@ export async function filterTikTokJson(
     });
   }
 
-  if (candidates.size === 0 || !config.tiktok.caliberFilter) return data;
+  if (candidates.size === 0 || !config.tiktok.caliberFilter || isProfileSurface) return data;
 
   const droppedIds = await decide([...candidates.values()]);
   if (droppedIds.size === 0) return data;

@@ -43,20 +43,25 @@ function isRecord(value: unknown): value is JsonRecord {
 export function isYouTubeSafeRoute(pageUrl: string): boolean {
   try {
     const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
-    return (
-      pathname === "/feed/subscriptions" ||
-      pathname === "/feed/history" ||
-      pathname === "/feed/library" ||
-      pathname === "/feed/you" ||
-      pathname === "/playlist" ||
-      pathname.startsWith("/@") ||
-      pathname.startsWith("/channel/") ||
-      pathname.startsWith("/c/") ||
-      pathname.startsWith("/user/")
-    );
+    if (pathname === "/" || pathname === "/watch" || pathname === "/results") {
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
+}
+
+function isYouTubeChannelPayload(data: unknown): boolean {
+  if (!isRecord(data)) return false;
+  if (isRecord(data.metadata) && isRecord(data.metadata.channelMetadataRenderer)) return true;
+  if (
+    isRecord(data.header) &&
+    (isRecord(data.header.pageHeaderRenderer) || isRecord(data.header.c4TabbedHeaderRenderer))
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function surfaceFromEndpoint(urlPath: string): FeedSurface {
@@ -293,7 +298,7 @@ export async function filterYouTubeJson(
   if (!isRecord(data) && !Array.isArray(data)) return data;
 
   const surface = surfaceFromEndpoint(urlPath);
-  const safeRoute = isYouTubeSafeRoute(pageUrl);
+  const safeRoute = isYouTubeSafeRoute(pageUrl) || isYouTubeChannelPayload(data);
   const candidates = new Map<string, FeedItem>();
 
   function collectAndStripNoise(node: unknown): boolean {

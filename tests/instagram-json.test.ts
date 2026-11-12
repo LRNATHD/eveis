@@ -123,4 +123,39 @@ describe("filterInstagramJson", () => {
     expect(out.feed_items).toHaveLength(1);
     expect(out.feed_items[0]!.media_or_ad.pk).toBe("ig_post_friend");
   });
+
+  it("never suppresses posts on Instagram user profiles (user_timeline / clips__user) while still calming ALL-CAPS captions", async () => {
+    const profileGraphql = {
+      data: {
+        xdt_api__v1__feed__user_timeline_graphql_connection: {
+          edges: [
+            {
+              node: {
+                pk: "prof_ig_1",
+                caption: { text: "NEW STUDIO BUILD IN PROGRESS!!" },
+                user: { pk: "u9", username: "some_creator", friendship_status: { following: false } },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    let deciderCalled = false;
+    const out = (await filterInstagramJson(
+      profileGraphql,
+      "/graphql/query",
+      DEFAULT_CONFIG,
+      async () => {
+        deciderCalled = true;
+        return new Set(["prof_ig_1"]);
+      },
+      "https://www.instagram.com/some_creator/",
+    )) as typeof profileGraphql;
+
+    expect(deciderCalled).toBe(false);
+    const edges = out.data.xdt_api__v1__feed__user_timeline_graphql_connection.edges;
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.node.caption.text).toBe("New studio build in progress!");
+  });
 });

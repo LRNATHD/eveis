@@ -302,16 +302,28 @@
       metrics: { likes, replies, views }
     };
   }
-  async function filterInstagramJson(data, urlPath, config2, decide) {
+  function isInstagramProfileOrPermalink(pageUrl) {
+    if (!pageUrl) return false;
+    try {
+      const p = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
+      if (p === "/" || p === "/reels" || p.startsWith("/reels/")) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async function filterInstagramJson(data, urlPath, config2, decide, pageUrl) {
     if (!config2.enabled || !config2.instagram.enabled) return data;
     if (!isRecord(data)) return data;
+    const onProfileOrPost = isInstagramProfileOrPermalink(pageUrl);
     const candidates = /* @__PURE__ */ new Map();
     const slots = [];
     function processGraphqlConnection(connKey, conn) {
       if (!Array.isArray(conn.edges)) return;
+      const isUserProfileConn = onProfileOrPost || connKey.includes("user") || !connKey.includes("clips__home") && !connKey.includes("feed__timeline");
       const isReels = connKey.includes("clips");
       const surface = isReels ? "reels" : "timeline";
-      const filterActive = isReels ? config2.instagram.filterReels : config2.instagram.caliberFilter;
+      const filterActive = !isUserProfileConn && (isReels ? config2.instagram.filterReels : config2.instagram.caliberFilter);
       const edges = conn.edges;
       const getMediaFromEdge = (edge) => {
         if (!isRecord(edge) || !isRecord(edge.node)) return null;
@@ -330,20 +342,18 @@
           i--;
           continue;
         }
-        if (!filterActive) continue;
         const item = extractIgMedia(media, surface);
-        if (item) {
-          candidates.set(item.id, item);
-          slots.push({
-            list: edges,
-            id: item.id,
-            getMediaId: (el) => {
-              const m = getMediaFromEdge(el);
-              const raw = m?.pk ?? m?.id ?? m?.code;
-              return raw != null ? String(raw) : "";
-            }
-          });
-        }
+        if (!filterActive || !item) continue;
+        candidates.set(item.id, item);
+        slots.push({
+          list: edges,
+          id: item.id,
+          getMediaId: (el) => {
+            const m = getMediaFromEdge(el);
+            const raw = m?.pk ?? m?.id ?? m?.code;
+            return raw != null ? String(raw) : "";
+          }
+        });
       }
     }
     if (isRecord(data.data)) {
@@ -469,10 +479,21 @@
     if (!sawSource) updated.push("tiktok_webapp_theme_source=custom");
     return updated.join("; ");
   }
-  async function filterTikTokJson(data, config2, decide) {
+  function isTikTokProfileOrDirectRoute(urlPath, pageUrl) {
+    if (urlPath.includes("/api/post/item_list")) return true;
+    if (!pageUrl) return false;
+    try {
+      const pathname = new URL(pageUrl).pathname;
+      return /(?:^|\/)@[^/]+/.test(pathname);
+    } catch {
+      return false;
+    }
+  }
+  async function filterTikTokJson(data, config2, decide, urlPath = "", pageUrl = "") {
     if (!config2.enabled || !config2.tiktok.enabled) return data;
     if (!isRecord2(data) || !Array.isArray(data.itemList)) return data;
-    if (config2.tiktok.postOnlyMode) {
+    const isProfileSurface = isTikTokProfileOrDirectRoute(urlPath, pageUrl);
+    if (config2.tiktok.postOnlyMode && !isProfileSurface) {
       data.itemList = [];
       return data;
     }
@@ -490,7 +511,7 @@
       if (typeof raw.desc === "string") {
         raw.desc = calmTitle(raw.desc);
       }
-      if (!config2.tiktok.caliberFilter) continue;
+      if (!config2.tiktok.caliberFilter || isProfileSurface) continue;
       const id = typeof raw.id === "string" ? raw.id : "";
       if (!id) continue;
       const author = isRecord2(raw.author) ? raw.author : {};
@@ -513,7 +534,7 @@
         }
       });
     }
-    if (candidates.size === 0 || !config2.tiktok.caliberFilter) return data;
+    if (candidates.size === 0 || !config2.tiktok.caliberFilter || isProfileSurface) return data;
     const droppedIds = await decide([...candidates.values()]);
     if (droppedIds.size === 0) return data;
     for (let i = list.length - 1; i >= 0; i--) {
@@ -1106,7 +1127,8 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   async function filterTwitterJson(data, urlPath, config2, decide) {
     if (!config2.enabled || !config2.x.enabled) return data;
     if (!isRecord3(data)) return data;
-    const isAdsOnlySurface = urlPath.includes("/HomeLatestTimeline") || urlPath.includes("/TweetDetail");
+    const isProfilePayload = isRecord3(data.data) && isRecord3(data.data.user);
+    const isAdsOnlySurface = isProfilePayload || urlPath.includes("/HomeLatestTimeline") || urlPath.includes("/TweetDetail") || urlPath.includes("/UserTweets") || urlPath.includes("/UserMedia") || urlPath.includes("/HighlightsTweets") || urlPath.includes("/Likes");
     const surface = urlPath.includes("/SearchTimeline") ? "search" : "timeline";
     const candidates = /* @__PURE__ */ new Map();
     const entryRefs = [];
@@ -1361,10 +1383,21 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   function isYouTubeSafeRoute(pageUrl) {
     try {
       const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
-      return pathname === "/feed/subscriptions" || pathname === "/feed/history" || pathname === "/feed/library" || pathname === "/feed/you" || pathname === "/playlist" || pathname.startsWith("/@") || pathname.startsWith("/channel/") || pathname.startsWith("/c/") || pathname.startsWith("/user/");
+      if (pathname === "/" || pathname === "/watch" || pathname === "/results") {
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
+  }
+  function isYouTubeChannelPayload(data) {
+    if (!isRecord4(data)) return false;
+    if (isRecord4(data.metadata) && isRecord4(data.metadata.channelMetadataRenderer)) return true;
+    if (isRecord4(data.header) && (isRecord4(data.header.pageHeaderRenderer) || isRecord4(data.header.c4TabbedHeaderRenderer))) {
+      return true;
+    }
+    return false;
   }
   function surfaceFromEndpoint(urlPath) {
     if (urlPath.includes("/search") || urlPath.includes("/results")) return "search";
@@ -1570,7 +1603,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     if (!config2.enabled || !config2.youtube.enabled) return data;
     if (!isRecord4(data) && !Array.isArray(data)) return data;
     const surface = surfaceFromEndpoint(urlPath);
-    const safeRoute = isYouTubeSafeRoute(pageUrl);
+    const safeRoute = isYouTubeSafeRoute(pageUrl) || isYouTubeChannelPayload(data);
     const candidates = /* @__PURE__ */ new Map();
     function collectAndStripNoise(node) {
       if (Array.isArray(node)) {
@@ -2330,7 +2363,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     "https://www.tiktok.com/api/recommend/item_list/*",
     "https://www.tiktok.com/api/post/item_list/*"
   ];
-  var TWITTER_TIMELINE_RE = /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|TweetDetail|SearchTimeline|ExplorePage|GenericTimelineById|ExploreSidebar)/;
+  var TWITTER_TIMELINE_RE = /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|TweetDetail|SearchTimeline|ExplorePage|GenericTimelineById|ExploreSidebar|UserTweets|UserTweetsAndReplies|UserMedia|HighlightsTweets)/;
   function shouldFilterRequest(details) {
     if (!config.enabled) return false;
     let parsed;
@@ -2414,9 +2447,9 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
           } else if (host === "x.com" || host === "twitter.com") {
             transformed = await filterTwitterJson(json, path, config, decideBatch);
           } else if (host.endsWith("instagram.com")) {
-            transformed = await filterInstagramJson(json, path, config, decideBatch);
+            transformed = await filterInstagramJson(json, path, config, decideBatch, pageUrl);
           } else if (host.endsWith("tiktok.com")) {
-            transformed = await filterTikTokJson(json, config, decideBatch);
+            transformed = await filterTikTokJson(json, config, decideBatch, path, pageUrl);
           }
           filter.write(new TextEncoder().encode(JSON.stringify(transformed)));
         } catch {

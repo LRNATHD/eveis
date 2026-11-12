@@ -57,4 +57,33 @@ describe("filterTikTokJson", () => {
     expect(out.itemList.map((i) => i.id)).toEqual(["tt_good_2"]);
     expect(out.itemList[0]!.desc).toBe("Lathe turning a titanium PCB housing!");
   });
+
+  it("never suppresses videos on TikTok user profiles (/api/post/item_list/) while still calming captions", async () => {
+    const profilePayload = {
+      itemList: [
+        {
+          id: "tt_prof_1",
+          isAd: false,
+          desc: "TESTING MY NEW CNC SPINDLE!!",
+          author: { id: "a9", uniqueId: "cnc_person", followStatus: 0 },
+        },
+      ],
+    };
+
+    let deciderCalled = false;
+    const out = (await filterTikTokJson(
+      profilePayload,
+      DEFAULT_CONFIG,
+      async () => {
+        deciderCalled = true;
+        return new Set(["tt_prof_1"]);
+      },
+      "/api/post/item_list/",
+      "https://www.tiktok.com/@cnc_person",
+    )) as typeof profilePayload;
+
+    expect(deciderCalled).toBe(false);
+    expect(out.itemList).toHaveLength(1);
+    expect(out.itemList[0]!.desc).toBe("Testing my new CNC spindle!");
+  });
 });

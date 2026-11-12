@@ -98,7 +98,7 @@ const INTERCEPT_URLS = [
 ];
 
 const TWITTER_TIMELINE_RE =
-  /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|TweetDetail|SearchTimeline|ExplorePage|GenericTimelineById|ExploreSidebar)/;
+  /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|TweetDetail|SearchTimeline|ExplorePage|GenericTimelineById|ExploreSidebar|UserTweets|UserTweetsAndReplies|UserMedia|HighlightsTweets)/;
 
 function shouldFilterRequest(details: browser.webRequest._OnBeforeRequestDetails): boolean {
   if (!config.enabled) return false;
@@ -208,9 +208,9 @@ browser.webRequest.onBeforeRequest.addListener(
         } else if (host === "x.com" || host === "twitter.com") {
           transformed = await filterTwitterJson(json, path, config, decideBatch);
         } else if (host.endsWith("instagram.com")) {
-          transformed = await filterInstagramJson(json, path, config, decideBatch);
+          transformed = await filterInstagramJson(json, path, config, decideBatch, pageUrl);
         } else if (host.endsWith("tiktok.com")) {
-          transformed = await filterTikTokJson(json, config, decideBatch);
+          transformed = await filterTikTokJson(json, config, decideBatch, path, pageUrl);
         }
 
         filter.write(new TextEncoder().encode(JSON.stringify(transformed)));

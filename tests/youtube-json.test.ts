@@ -248,6 +248,48 @@ describe("filterYouTubeJson", () => {
     expect(deciderCalled).toBe(false);
     expect(out.contents.items).toHaveLength(1);
   });
+
+  it("never drops videos on YouTube channel profiles (even during SPA transitions from /) while still de-hyping titles and thumbnails", async () => {
+    const channelPayload = {
+      metadata: {
+        channelMetadataRenderer: { title: "Some Creator", externalId: "UC_profile_1" },
+      },
+      contents: {
+        items: [
+          {
+            videoRenderer: {
+              videoId: "profVid0001",
+              title: { simpleText: "MY CRAZIEST PCB BUILD YET!!" },
+              thumbnail: {
+                thumbnails: [{ url: "https://i.ytimg.com/vi/profVid0001/maxresdefault.jpg" }],
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    let deciderCalled = false;
+    const out = (await filterYouTubeJson(
+      channelPayload,
+      "/youtubei/v1/browse",
+      "https://www.youtube.com/",
+      DEFAULT_CONFIG,
+      async () => {
+        deciderCalled = true;
+        return new Set(["profVid0001"]);
+      },
+    )) as typeof channelPayload;
+
+    expect(deciderCalled).toBe(false);
+    expect(out.contents.items).toHaveLength(1);
+    expect(out.contents.items[0]!.videoRenderer.title.simpleText).toBe(
+      "My craziest PCB build yet!",
+    );
+    expect(out.contents.items[0]!.videoRenderer.thumbnail.thumbnails[0]!.url).toBe(
+      "https://i.ytimg.com/vi/profVid0001/hq2.jpg",
+    );
+  });
 });
 
 describe("rewriteYouTubeHtmlInitialData", () => {

@@ -314,6 +314,72 @@ describe("filterTwitterJson", () => {
     expect(entries.map((e) => e.entryId)).toEqual(["tweet-focal-999"]);
   });
 
+  it("never suppresses posts on Twitter user profiles (/UserTweets) while still stripping ads and calming ALL-CAPS", async () => {
+    const profilePayload = {
+      data: {
+        user: {
+          result: {
+            timeline_v2: {
+              timeline: {
+                instructions: [
+                  {
+                    entries: [
+                      {
+                        entryId: "tweet-prof-1",
+                        content: {
+                          itemContent: {
+                            tweet_results: {
+                              result: {
+                                rest_id: "777",
+                                core: {
+                                  user_results: {
+                                    result: { legacy: { screen_name: "some_person", following: false } },
+                                  },
+                                },
+                                legacy: { full_text: "NEW HARDWARE DROP TODAY!!" },
+                              },
+                            },
+                          },
+                        },
+                      },
+                      {
+                        entryId: "promoted-prof-ad",
+                        content: {
+                          itemContent: {
+                            promotedMetadata: { impressionId: "ad_p" },
+                            tweet_results: { result: { rest_id: "ad_p" } },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+
+    let deciderCalled = false;
+    await filterTwitterJson(
+      profilePayload,
+      "/i/api/graphql/abc/UserTweets",
+      DEFAULT_CONFIG,
+      async () => {
+        deciderCalled = true;
+        return new Set(["777"]);
+      },
+    );
+
+    expect(deciderCalled).toBe(false);
+    const entries = profilePayload.data.user.result.timeline_v2.timeline.instructions[0]!.entries;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.content.itemContent.tweet_results.result!.legacy!.full_text).toBe(
+      "New hardware drop today!",
+    );
+  });
+
   it("includes quoted tweet text, media tags, and followed-retweeter status on HomeTimeline", async () => {
     const payload = {
       data: {

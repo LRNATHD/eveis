@@ -259,7 +259,10 @@
   function isYouTubeSafeRoute(pageUrl) {
     try {
       const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
-      return pathname === "/feed/subscriptions" || pathname === "/feed/history" || pathname === "/feed/library" || pathname === "/feed/you" || pathname === "/playlist" || pathname.startsWith("/@") || pathname.startsWith("/channel/") || pathname.startsWith("/c/") || pathname.startsWith("/user/");
+      if (pathname === "/" || pathname === "/watch" || pathname === "/results") {
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
