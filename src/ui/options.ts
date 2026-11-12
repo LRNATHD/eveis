@@ -1,12 +1,13 @@
 import {
   API_DEFAULT_ENDPOINT,
   API_DEFAULT_MODEL,
+  DEFAULT_CONFIG,
   DEFAULT_RUBRIC,
   LOCAL_DEFAULT_ENDPOINT,
   LOCAL_DEFAULT_MODEL,
   mergeConfig,
 } from "../defaults.js";
-import type { GraderMode, SieveConfig } from "../types.js";
+import { isRecord, type GraderMode, type SieveConfig } from "../types.js";
 
 function parseLines(raw: string): string[] {
   return raw
@@ -15,22 +16,37 @@ function parseLines(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseGraderMode(val: string): GraderMode {
+  return val === "off" || val === "local" || val === "api" ? val : DEFAULT_CONFIG.grader.mode;
+}
+
+function requireElement<T extends HTMLElement>(
+  id: string,
+  ctor: abstract new (...args: never[]) => T,
+): T {
+  const el = document.getElementById(id);
+  if (!(el instanceof ctor)) {
+    throw new Error(`Missing element #${id}`);
+  }
+  return el;
+}
+
 async function initOptions(): Promise<void> {
   const stored = await browser.storage.local.get("sieveConfig");
-  const config: SieveConfig = mergeConfig(stored.sieveConfig as Partial<SieveConfig> | undefined);
+  const config: SieveConfig = mergeConfig(stored.sieveConfig);
 
-  const passFollowedEl = document.getElementById("pass-followed") as HTMLInputElement;
-  const noveltyFilterEl = document.getElementById("novelty-filter") as HTMLInputElement;
-  const modeEl = document.getElementById("grader-mode") as HTMLSelectElement;
-  const holdEl = document.getElementById("grader-hold") as HTMLInputElement;
-  const endpointEl = document.getElementById("grader-endpoint") as HTMLInputElement;
-  const modelEl = document.getElementById("grader-model") as HTMLInputElement;
-  const keyEl = document.getElementById("grader-key") as HTMLInputElement;
-  const rubricEl = document.getElementById("grader-rubric") as HTMLTextAreaElement;
-  const allowEl = document.getElementById("allow-handles") as HTMLTextAreaElement;
-  const blockEl = document.getElementById("block-handles") as HTMLTextAreaElement;
+  const passFollowedEl = requireElement("pass-followed", HTMLInputElement);
+  const noveltyFilterEl = requireElement("novelty-filter", HTMLInputElement);
+  const modeEl = requireElement("grader-mode", HTMLSelectElement);
+  const holdEl = requireElement("grader-hold", HTMLInputElement);
+  const endpointEl = requireElement("grader-endpoint", HTMLInputElement);
+  const modelEl = requireElement("grader-model", HTMLInputElement);
+  const keyEl = requireElement("grader-key", HTMLInputElement);
+  const rubricEl = requireElement("grader-rubric", HTMLTextAreaElement);
+  const allowEl = requireElement("allow-handles", HTMLTextAreaElement);
+  const blockEl = requireElement("block-handles", HTMLTextAreaElement);
+  const testBtn = requireElement("test-grader", HTMLButtonElement);
   const saveIndicator = document.getElementById("save-indicator");
-  const testBtn = document.getElementById("test-grader") as HTMLButtonElement;
   const testResult = document.getElementById("test-result");
   const statsEl = document.getElementById("memory-stats");
 
@@ -54,8 +70,11 @@ async function initOptions(): Promise<void> {
     saveTimer = setTimeout(() => {
       config.passFollowed = passFollowedEl.checked;
       config.noveltyFilter = noveltyFilterEl.checked;
-      config.grader.mode = modeEl.value as GraderMode;
-      config.grader.streamHoldMs = Math.max(100, Number.parseInt(holdEl.value, 10) || 650);
+      config.grader.mode = parseGraderMode(modeEl.value);
+      config.grader.streamHoldMs = Math.max(
+        100,
+        Number.parseInt(holdEl.value, 10) || DEFAULT_CONFIG.grader.streamHoldMs,
+      );
       config.grader.endpoint = endpointEl.value.trim();
       config.grader.model = modelEl.value.trim();
       config.grader.apiKey = keyEl.value.trim();
@@ -70,7 +89,7 @@ async function initOptions(): Promise<void> {
   }
 
   modeEl.addEventListener("change", () => {
-    const nextMode = modeEl.value as GraderMode;
+    const nextMode = parseGraderMode(modeEl.value);
     if (nextMode === "local" && endpointEl.value === API_DEFAULT_ENDPOINT) {
       endpointEl.value = LOCAL_DEFAULT_ENDPOINT;
       modelEl.value = LOCAL_DEFAULT_MODEL;
@@ -105,23 +124,25 @@ async function initOptions(): Promise<void> {
     testBtn.disabled = true;
     if (testResult) testResult.textContent = "testing...";
     try {
-      const res = (await browser.runtime.sendMessage({
+      const res: unknown = await browser.runtime.sendMessage({
         type: "TEST_GRADER",
         graderOverride: {
-          mode: modeEl.value as GraderMode,
+          mode: parseGraderMode(modeEl.value),
           endpoint: endpointEl.value.trim(),
           model: modelEl.value.trim(),
           apiKey: keyEl.value.trim(),
           rubric: rubricEl.value,
-          streamHoldMs: Number.parseInt(holdEl.value, 10) || 650,
+          streamHoldMs: Number.parseInt(holdEl.value, 10) || DEFAULT_CONFIG.grader.streamHoldMs,
         },
-      })) as { ok?: boolean; ms?: number; droppedProbeSlop?: boolean; error?: string };
+      });
 
-      if (testResult) {
-        if (!res.ok) {
-          testResult.textContent = `failed: ${res.error ?? "unreachable"}`;
+      if (testResult && isRecord(res)) {
+        if (res.ok !== true) {
+          const msg = typeof res.error === "string" ? res.error : "unreachable";
+          testResult.textContent = `failed: ${msg}`;
         } else {
-          testResult.textContent = `ok · ${res.ms ?? 0}ms · slop probe ${res.droppedProbeSlop ? "dropped" : "kept"}`;
+          const ms = typeof res.ms === "number" ? res.ms : 0;
+          testResult.textContent = `ok · ${ms}ms · slop probe ${res.droppedProbeSlop ? "dropped" : "kept"}`;
         }
       }
     } catch {
@@ -134,14 +155,14 @@ async function initOptions(): Promise<void> {
   async function refreshStats(): Promise<void> {
     if (!statsEl) return;
     try {
-      const s = (await browser.runtime.sendMessage({ type: "GET_STATUS" })) as {
-        cachedItems?: number;
-        learnedCreators?: number;
-        dwelledCount?: number;
-        hnVideos?: number;
-        slopChannels?: number;
-      };
-      statsEl.textContent = `${(s.hnVideos ?? 0).toLocaleString()} hn videos · ${(s.slopChannels ?? 0).toLocaleString()} slop channels · ${s.cachedItems ?? 0} cached · ${s.learnedCreators ?? 0} creators · ${s.dwelledCount ?? 0} dwelled`;
+      const s: unknown = await browser.runtime.sendMessage({ type: "GET_STATUS" });
+      if (!isRecord(s)) return;
+      const hnVideos = typeof s.hnVideos === "number" ? s.hnVideos : 0;
+      const slopChannels = typeof s.slopChannels === "number" ? s.slopChannels : 0;
+      const cachedItems = typeof s.cachedItems === "number" ? s.cachedItems : 0;
+      const learnedCreators = typeof s.learnedCreators === "number" ? s.learnedCreators : 0;
+      const dwelledCount = typeof s.dwelledCount === "number" ? s.dwelledCount : 0;
+      statsEl.textContent = `${hnVideos.toLocaleString()} hn videos · ${slopChannels.toLocaleString()} slop channels · ${cachedItems} cached · ${learnedCreators} creators · ${dwelledCount} dwelled`;
     } catch {
       statsEl.textContent = "stats unavailable";
     }

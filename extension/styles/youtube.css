@@ -29,17 +29,17 @@ html[data-sieve-yt-shorts="1"] ytd-rich-section-renderer:has([is-mini-game-card-
 html[data-sieve-yt-header="1"] #voice-search-button,
 html[data-sieve-yt-header="1"] ytd-masthead #voice-search-button,
 html[data-sieve-yt-header="1"] ytd-masthead #center > *:not(yt-searchbox):not(ytd-searchbox),
-html[data-sieve-yt-header="1"] button[aria-label="Search with your voice"],
-html[data-sieve-yt-header="1"] [aria-label*="Gemini" i],
-html[data-sieve-yt-header="1"] [title*="Gemini" i],
-html[data-sieve-yt-header="1"] [aria-label*="Ask YouTube" i],
-html[data-sieve-yt-header="1"] [aria-label*="Search with AI" i],
-html[data-sieve-yt-header="1"] yt-button-view-model:has([aria-label="Ask"]),
-html[data-sieve-yt-header="1"] yt-button-view-model:has([aria-label*="Ask YouTube" i]),
-html[data-sieve-yt-header="1"] yt-button-view-model:has([aria-label*="Gemini" i]),
-html[data-sieve-yt-header="1"] ytd-button-renderer:has([aria-label="Ask"]),
-html[data-sieve-yt-header="1"] ytd-button-renderer:has([aria-label*="Gemini" i]),
-html[data-sieve-yt-header="1"] button[aria-label="Ask"],
+html[data-sieve-yt-header="1"] ytd-masthead button[aria-label="Search with your voice"],
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) [aria-label*="Gemini" i],
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) [title*="Gemini" i],
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) [aria-label*="Ask YouTube" i],
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) [aria-label*="Search with AI" i],
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) yt-button-view-model:has([aria-label="Ask"]),
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) yt-button-view-model:has([aria-label*="Ask YouTube" i]),
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) yt-button-view-model:has([aria-label*="Gemini" i]),
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) ytd-button-renderer:has([aria-label="Ask"]),
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) ytd-button-renderer:has([aria-label*="Gemini" i]),
+html[data-sieve-yt-header="1"] :is(ytd-masthead, ytd-watch-metadata) button[aria-label="Ask"],
 html[data-sieve-yt-header="1"] ytd-engagement-panel-section-list-renderer[target-id*="ask" i],
 html[data-sieve-yt-header="1"] ytd-talk-to-recs-flow-renderer,
 html[data-sieve-yt-header="1"] .ytdTalkToRecsFlowRendererFlowContent,
@@ -63,12 +63,9 @@ html[data-sieve-yt-header="1"] ytd-masthead[frosted-glass-mode]:not([dark]):not(
   background: var(--yt-spec-base-background) !important;
 }
 
-/* Dynamically switch masthead to dark mode whenever watching in Theater / Landscape / Fullscreen mode */
+/* Switch masthead to dark mode only while actively watching in Theater / Landscape / Fullscreen on /watch */
 html[data-sieve-yt-theater="1"] #frosted-glass,
 html[data-sieve-yt-theater="1"] #frosted-glass.with-chipbar,
-html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) #frosted-glass,
-html[data-sieve-yt-header="1"] ytd-masthead:is([dark], [theater]),
-html[data-sieve-yt-header="1"] ytd-masthead:is([dark], [theater]) #background,
 html[data-sieve-yt-theater="1"] ytd-masthead,
 html[data-sieve-yt-theater="1"] ytd-masthead #background {
   background: #0f0f0f !important;
@@ -81,25 +78,21 @@ html[data-sieve-yt-theater="1"] ytd-masthead #background {
   color: #f1f1f1 !important;
 }
 
-html[data-sieve-yt-theater="1"] ytd-masthead :is(#guide-icon, #logo-icon, yt-icon, svg),
-html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead :is(#guide-icon, #logo-icon, yt-icon, svg) {
+html[data-sieve-yt-theater="1"] ytd-masthead :is(#guide-icon, #logo-icon, yt-icon, svg) {
   color: #f1f1f1 !important;
 }
 
-html[data-sieve-yt-theater="1"] ytd-masthead :is(.ytSearchboxComponentInputBox, #search-form #container.ytd-searchbox),
-html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead :is(.ytSearchboxComponentInputBox, #search-form #container.ytd-searchbox) {
+html[data-sieve-yt-theater="1"] ytd-masthead :is(.ytSearchboxComponentInputBox, #search-form #container.ytd-searchbox) {
   background: #121212 !important;
   border-color: #303030 !important;
   color: #f1f1f1 !important;
 }
 
-html[data-sieve-yt-theater="1"] ytd-masthead :is(input.ytSearchboxComponentInput, #search-input input),
-html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead :is(input.ytSearchboxComponentInput, #search-input input) {
+html[data-sieve-yt-theater="1"] ytd-masthead :is(input.ytSearchboxComponentInput, #search-input input) {
   color: #f1f1f1 !important;
 }
 
-html[data-sieve-yt-theater="1"] ytd-masthead .ytSearchboxComponentSearchButton,
-html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead .ytSearchboxComponentSearchButton {
+html[data-sieve-yt-theater="1"] ytd-masthead .ytSearchboxComponentSearchButton {
   background: #222222 !important;
   border-color: #303030 !important;
   color: #f1f1f1 !important;
@@ -126,11 +119,11 @@ html[data-sieve-yt-header="1"] ytd-masthead #end {
 }
 
 /* Reflow grid rows seamlessly if any SSR card is hidden */
-ytd-rich-grid-row,
-ytd-rich-grid-row > #contents {
+html[data-sieve-yt-on="1"] ytd-rich-grid-row,
+html[data-sieve-yt-on="1"] ytd-rich-grid-row > #contents {
   display: contents !important;
 }
 
-[data-sieve-yt-dropped="1"] {
+html[data-sieve-yt-on="1"] [data-sieve-yt-dropped="1"] {
   display: none !important;
 }

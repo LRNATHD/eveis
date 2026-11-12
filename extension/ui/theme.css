@@ -123,7 +123,6 @@ body.options {
   -webkit-tap-highlight-color: transparent;
 }
 
-.row[aria-disabled="true"],
 .card.is-off .card-body {
   opacity: 0.4;
 }

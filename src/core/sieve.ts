@@ -1,8 +1,10 @@
-import type { NoveltyMemory } from "../background/novelty.js";
+import { DEFAULT_CONFIG } from "../defaults.js";
 import type {
   FeedItem,
   MemoryLookup,
   MemoryStore,
+  NoveltyLookup,
+  ResolvedVerdict,
   SeedSets,
   SieveConfig,
   Verdict,
@@ -54,7 +56,7 @@ export function evaluateLocalTiers(
   config: SieveConfig,
   seeds: SeedSets,
   memory: MemoryLookup,
-  novelty?: Pick<NoveltyMemory, "isRedundantRehash">,
+  novelty?: NoveltyLookup,
 ): Verdict {
   if (item.isSponsored) return "drop";
 
@@ -92,13 +94,9 @@ export function evaluateLocalTiers(
 
   if (!item.isFollowed) {
     if (item.platform === "x" && config.x.slopCadenceFilter) {
-      if (isStructuralSlop(item.titleOrText, { isReply: item.surface === "replies" }, 65)) {
-        return "drop";
-      }
+      if (isStructuralSlop(item.titleOrText, {}, 65)) return "drop";
     } else if (item.platform !== "youtube") {
-      if (isStructuralSlop(item.titleOrText, { isReply: false }, 74)) {
-        return "drop";
-      }
+      if (isStructuralSlop(item.titleOrText, {}, 74)) return "drop";
     }
 
     if (config.noveltyFilter && novelty?.isRedundantRehash(item.titleOrText)) {
@@ -123,13 +121,6 @@ export function evaluateLocalTiers(
     }
   }
 
-  if (item.platform === "x" && item.surface === "replies" && item.isBlueReply && !item.isFollowed) {
-    const trimmed = item.titleOrText.trim();
-    if (trimmed.length <= 18 && !/[a-z]{4,}/i.test(trimmed)) {
-      return "drop";
-    }
-  }
-
   return "uncertain";
 }
 
@@ -139,7 +130,7 @@ export async function runSieveOnBatch(
   seeds: SeedSets,
   memory: MemoryStore,
   fetchImpl: typeof fetch = fetch,
-  novelty?: Pick<NoveltyMemory, "isRedundantRehash">,
+  novelty?: NoveltyLookup,
 ): Promise<Set<string>> {
   const droppedIds = new Set<string>();
   const uncertain: FeedItem[] = [];
@@ -157,14 +148,16 @@ export async function runSieveOnBatch(
     return droppedIds;
   }
 
-  const holdMs = Math.max(50, config.grader.streamHoldMs || 900);
-  const gradingPromise = gradeItemsBatch(uncertain, config, fetchImpl).then(async (llmDrops) => {
-    for (const item of uncertain) {
-      const verdict: "keep" | "drop" = llmDrops.has(item.id) ? "drop" : "keep";
-      await memory.recordVerdict(item, verdict);
-    }
-    return llmDrops;
-  });
+  const holdMs = Math.max(50, config.grader.streamHoldMs || DEFAULT_CONFIG.grader.streamHoldMs);
+  const gradingPromise = gradeItemsBatch(uncertain, config, fetchImpl)
+    .then(async (llmDrops) => {
+      for (const item of uncertain) {
+        const verdict: ResolvedVerdict = llmDrops.has(item.id) ? "drop" : "keep";
+        await memory.recordVerdict(item, verdict);
+      }
+      return llmDrops;
+    })
+    .catch(() => new Set<string>());
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = Symbol("timeout");

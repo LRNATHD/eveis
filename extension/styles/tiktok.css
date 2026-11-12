@@ -47,6 +47,6 @@ html[data-sieve-tt-light="1"] {
   color-scheme: light !important;
 }
 
-[data-sieve-tt-dropped="1"] {
+html[data-sieve-tt-on="1"] [data-sieve-tt-dropped="1"] {
   display: none !important;
 }

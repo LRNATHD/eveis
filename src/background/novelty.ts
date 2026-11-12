@@ -1,3 +1,5 @@
+import { isRecord, type NoveltyMemory } from "../types.js";
+
 const NOVELTY_TTL_MS = 48 * 60 * 60 * 1000;
 const MAX_NOVELTY_RECORDS = 400;
 const MIN_SIGNATURE_TOKENS = 6;
@@ -149,11 +151,14 @@ interface DwelledEntry {
   at: number;
 }
 
-export interface NoveltyMemory {
-  recordDwelled(text: string): void;
-  isRedundantRehash(text: string): boolean;
-  clear(): void;
-  size(): number;
+function isDwelledEntry(v: unknown): v is DwelledEntry {
+  return (
+    isRecord(v) &&
+    typeof v.id === "string" &&
+    typeof v.at === "number" &&
+    Array.isArray(v.tokens) &&
+    v.tokens.every((t) => typeof t === "string")
+  );
 }
 
 export function extractSignatureTokens(text: string): Set<string> {
@@ -167,7 +172,6 @@ export function extractSignatureTokens(text: string): Set<string> {
   for (const raw of withoutUrls.split(/[^a-z0-9]+/)) {
     if (raw.length < 3) continue;
     if (STOPWORDS.has(raw)) continue;
-    if (/^\d+$/.test(raw) && raw.length < 2) continue;
     out.add(raw);
   }
   return out;
@@ -201,9 +205,9 @@ export function createNoveltyMemory(): NoveltyMemory {
     try {
       const req = db.transaction("dwelled", "readonly").objectStore("dwelled").getAll();
       req.onsuccess = () => {
-        const rows = (req.result ?? []) as DwelledEntry[];
-        rows
-          .filter((r) => now - r.at <= NOVELTY_TTL_MS && Array.isArray(r.tokens))
+        if (!Array.isArray(req.result)) return;
+        req.result
+          .filter((r): r is DwelledEntry => isDwelledEntry(r) && now - r.at <= NOVELTY_TTL_MS)
           .slice(-MAX_NOVELTY_RECORDS)
           .forEach((r) => {
             entries.push({ id: r.id, tokenSet: new Set(r.tokens), at: r.at });

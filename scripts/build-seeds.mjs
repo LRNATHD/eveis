@@ -1,3 +1,4 @@
+// @ts-check
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,11 +12,13 @@ const HACKERTUBE_VIDEOS_URL = "https://hackertube.org/download/videos.jsonl";
 const AISLIST_FALLBACK_URL =
   "https://raw.githubusercontent.com/Override92/AiSList/main/AiSList/aislist_blocklist.txt";
 
+/** @param {unknown} raw */
 function normKey(raw) {
   if (!raw || typeof raw !== "string") return "";
   return raw.trim().replace(/^@+/, "").toLowerCase();
 }
 
+/** @param {string} url */
 async function fetchText(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
@@ -32,12 +35,15 @@ async function main() {
       : fetchText(AISLIST_FALLBACK_URL),
   ]);
 
+  /** @type {Set<string>} */
   const hnVideos = new Set();
+  /** @type {Set<string>} */
   const hnChannels = new Set();
 
   for (const line of videosJsonl.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+    /** @type {Record<string, unknown>} */
     const row = JSON.parse(trimmed);
     const vid = row.vid || row.video_id || row.id;
     if (typeof vid === "string" && vid.length >= 8) {
@@ -49,6 +55,7 @@ async function main() {
     }
   }
 
+  /** @type {Set<string>} */
   const slopChannels = new Set();
   for (const line of aislistRaw.split("\n")) {
     const trimmed = line.trim();

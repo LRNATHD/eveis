@@ -1,3 +1,4 @@
+// @ts-check
 import * as esbuild from "esbuild";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = path.join(rootDir, "extension", "dist");
 
+/** @type {ReadonlyArray<readonly [string, string]>} */
 const entries = [
   ["src/background/index.ts", "background.js"],
   ["src/content/youtube.ts", "content-youtube.js"],

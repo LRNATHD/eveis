@@ -1,5 +1,5 @@
 import { filterInstagramJson } from "../adapters/instagram-json.js";
-import { decodeUtf8Chunks } from "../adapters/stream-decode.js";
+import { concatByteChunks, decodeUtf8Chunks } from "../adapters/stream-decode.js";
 import {
   filterTikTokJson,
   rewriteTikTokThemeCookieHeader,
@@ -13,7 +13,17 @@ import { clearDeArrowCache, lookupDeArrowTitles } from "../core/dearrow.js";
 import { gradeItemsBatch } from "../core/llm.js";
 import { runSieveOnBatch } from "../core/sieve.js";
 import { DEFAULT_CONFIG, mergeConfig } from "../defaults.js";
-import type { FeedItem, SeedSets, SieveConfig } from "../types.js";
+import {
+  isRecord,
+  type EvaluateSsrItemsResponse,
+  type FeedItem,
+  type GraderSettings,
+  type ResolveDearrowTitlesResponse,
+  type SeedSets,
+  type SieveConfig,
+  type SieveStatus,
+  type TestGraderResponse,
+} from "../types.js";
 import { createMemoryStore } from "./memory.js";
 import { createNoveltyMemory } from "./novelty.js";
 
@@ -39,20 +49,14 @@ async function loadSeedSet(assetPath: string, target: Set<string>): Promise<void
       if (trimmed) target.add(trimmed);
     }
   } catch {
-    // Seed loading should never crash background initialization.
+    // Missing seed assets leave the corresponding Set empty.
   }
 }
 
 async function initConfigAndSeeds(): Promise<void> {
   try {
     const stored = await browser.storage.local.get("sieveConfig");
-    const rawStored = stored.sieveConfig as Partial<SieveConfig> | undefined;
-    const needsVerdictReset = rawStored && (rawStored.schemaVersion ?? 1) < 6;
-    config = mergeConfig(rawStored);
-    if (needsVerdictReset) {
-      await memory.clear();
-      await browser.storage.local.set({ sieveConfig: config });
-    }
+    config = mergeConfig(stored.sieveConfig);
   } catch {
     config = structuredClone(DEFAULT_CONFIG);
   }
@@ -66,7 +70,7 @@ async function initConfigAndSeeds(): Promise<void> {
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.sieveConfig) {
-    config = mergeConfig(changes.sieveConfig.newValue as Partial<SieveConfig> | undefined);
+    config = mergeConfig(changes.sieveConfig.newValue);
   }
 });
 
@@ -143,17 +147,7 @@ function shouldFilterRequest(details: browser.webRequest._OnBeforeRequestDetails
   return false;
 }
 
-function concatRawChunks(chunks: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const c of chunks) total += c.byteLength;
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.byteLength;
-  }
-  return out;
-}
+const MAX_STREAM_BYTES = 12 * 1024 * 1024;
 
 browser.webRequest.onBeforeRequest.addListener(
   (details) => {
@@ -167,20 +161,46 @@ browser.webRequest.onBeforeRequest.addListener(
     }
 
     const chunks: Uint8Array[] = [];
+    let bufferedBytes = 0;
+    let passthrough = false;
 
     filter.ondata = (event) => {
-      chunks.push(new Uint8Array(event.data));
+      if (passthrough) {
+        filter.write(event.data);
+        return;
+      }
+      const chunk = new Uint8Array(event.data);
+      bufferedBytes += chunk.byteLength;
+      if (bufferedBytes > MAX_STREAM_BYTES) {
+        passthrough = true;
+        if (chunks.length > 0) {
+          filter.write(concatByteChunks(chunks));
+          chunks.length = 0;
+        }
+        filter.write(chunk);
+        return;
+      }
+      chunks.push(chunk);
     };
 
     filter.onerror = () => {
       try {
         filter.disconnect();
       } catch {
-        // Stream already closed.
+        // Stream already disconnected.
       }
     };
 
     filter.onstop = async () => {
+      if (passthrough) {
+        try {
+          filter.close();
+        } catch {
+          // Stream already closed.
+        }
+        return;
+      }
+
       try {
         const text = decodeUtf8Chunks(chunks);
         const parsedUrl = new URL(details.url);
@@ -196,11 +216,10 @@ browser.webRequest.onBeforeRequest.addListener(
             decideBatch,
           );
           filter.write(new TextEncoder().encode(rewritten));
-          filter.close();
           return;
         }
 
-        const json = JSON.parse(text) as unknown;
+        const json: unknown = JSON.parse(text);
         let transformed: unknown = json;
 
         if (host.endsWith("youtube.com")) {
@@ -215,15 +234,15 @@ browser.webRequest.onBeforeRequest.addListener(
 
         filter.write(new TextEncoder().encode(JSON.stringify(transformed)));
       } catch {
-        // Fail-open invariant: emit untouched bytes on any parse or transform error.
+        // Emit untouched response bytes on any parse or transform error.
         if (chunks.length > 0) {
-          filter.write(concatRawChunks(chunks));
+          filter.write(concatByteChunks(chunks));
         }
       } finally {
         try {
           filter.close();
         } catch {
-          // Ignore close after error.
+          // Stream already closed.
         }
       }
     };
@@ -252,7 +271,6 @@ browser.webRequest.onBeforeSendHeaders.addListener(
   ["blocking", "requestHeaders"],
 );
 
-// Force TikTok's SSR and API responses to render native Light Mode when tiktok.lightMode is enabled.
 browser.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
     if (!config.enabled || !config.tiktok.enabled || !config.tiktok.lightMode) return {};
@@ -279,60 +297,84 @@ browser.webRequest.onBeforeSendHeaders.addListener(
   ["blocking", "requestHeaders"],
 );
 
-interface RuntimeMessage {
-  type?: string;
-  items?: FeedItem[];
-  text?: string;
-  videoIds?: string[];
-  graderOverride?: SieveConfig["grader"];
+function parseGraderOverride(raw: unknown): GraderSettings | undefined {
+  if (!isRecord(raw)) return undefined;
+  const mode = raw.mode === "off" || raw.mode === "local" || raw.mode === "api" ? raw.mode : null;
+  if (
+    !mode ||
+    typeof raw.endpoint !== "string" ||
+    typeof raw.model !== "string" ||
+    typeof raw.apiKey !== "string" ||
+    typeof raw.rubric !== "string" ||
+    typeof raw.streamHoldMs !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    mode,
+    endpoint: raw.endpoint,
+    model: raw.model,
+    apiKey: raw.apiKey,
+    rubric: raw.rubric,
+    streamHoldMs: raw.streamHoldMs,
+  };
 }
 
 browser.runtime.onMessage.addListener((raw: unknown) => {
-  const msg = (raw && typeof raw === "object" ? raw : {}) as RuntimeMessage;
+  if (!isRecord(raw) || typeof raw.type !== "string") return undefined;
 
-  if (msg.type === "GET_STATUS") {
+  if (raw.type === "GET_STATUS") {
     const stats = memory.counts();
-    return Promise.resolve({
+    const status: SieveStatus = {
       sessionFilteredCount,
       cachedItems: stats.cachedItems,
       learnedCreators: stats.learnedCreators,
       dwelledCount: novelty.size(),
       hnVideos: seeds.hnVideos.size,
       slopChannels: seeds.slopChannels.size,
-    });
+    };
+    return Promise.resolve(status);
   }
 
-  if (msg.type === "CLEAR_CACHE") {
+  if (raw.type === "CLEAR_CACHE") {
     sessionFilteredCount = 0;
     novelty.clear();
     clearDeArrowCache();
     return memory.clear().then(() => ({ ok: true }));
   }
 
-  if (msg.type === "RECORD_DWELL" && typeof msg.text === "string") {
+  if (raw.type === "RECORD_DWELL" && typeof raw.text === "string") {
     if (config.enabled && config.noveltyFilter) {
-      novelty.recordDwelled(msg.text);
+      novelty.recordDwelled(raw.text);
     }
     return Promise.resolve({ ok: true });
   }
 
-  if (msg.type === "RESOLVE_DEARROW_TITLES" && Array.isArray(msg.videoIds)) {
+  if (raw.type === "RESOLVE_DEARROW_TITLES" && Array.isArray(raw.videoIds)) {
     if (!config.enabled || !config.youtube.enabled || !config.youtube.dearrowTitles) {
-      return Promise.resolve({ titles: {} });
+      return Promise.resolve({ titles: {} } satisfies ResolveDearrowTitlesResponse);
     }
-    return lookupDeArrowTitles(msg.videoIds).then((map) => ({
-      titles: Object.fromEntries(map),
-    }));
+    const videoIds = raw.videoIds.filter((id): id is string => typeof id === "string");
+    return lookupDeArrowTitles(videoIds).then(
+      (map): ResolveDearrowTitlesResponse => ({
+        titles: Object.fromEntries(map),
+      }),
+    );
   }
 
-  if (msg.type === "EVALUATE_SSR_ITEMS" && Array.isArray(msg.items)) {
-    return decideBatch(msg.items).then((dropped) => ({ dropped: [...dropped] }));
+  if (raw.type === "EVALUATE_SSR_ITEMS" && Array.isArray(raw.items)) {
+    const items = raw.items.filter(
+      (item): item is FeedItem =>
+        isRecord(item) && typeof item.id === "string" && typeof item.titleOrText === "string",
+    );
+    return decideBatch(items).then(
+      (dropped): EvaluateSsrItemsResponse => ({ dropped: [...dropped] }),
+    );
   }
 
-  if (msg.type === "TEST_GRADER") {
-    const testConfig: SieveConfig = msg.graderOverride
-      ? { ...config, grader: msg.graderOverride }
-      : config;
+  if (raw.type === "TEST_GRADER") {
+    const override = parseGraderOverride(raw.graderOverride);
+    const testConfig: SieveConfig = override ? { ...config, grader: override } : config;
     const probe: FeedItem[] = [
       {
         platform: "youtube",
@@ -351,16 +393,20 @@ browser.runtime.onMessage.addListener((raw: unknown) => {
     ];
     const started = Date.now();
     return gradeItemsBatch(probe, testConfig)
-      .then((drops) => ({
-        ok: true,
-        ms: Date.now() - started,
-        droppedProbeSlop: drops.has("probe_slop"),
-      }))
-      .catch((err: unknown) => ({
-        ok: false,
-        ms: Date.now() - started,
-        error: err instanceof Error ? err.message : "Request failed",
-      }));
+      .then(
+        (drops): TestGraderResponse => ({
+          ok: true,
+          ms: Date.now() - started,
+          droppedProbeSlop: drops.has("probe_slop"),
+        }),
+      )
+      .catch(
+        (err: unknown): TestGraderResponse => ({
+          ok: false,
+          ms: Date.now() - started,
+          error: err instanceof Error ? err.message : "Request failed",
+        }),
+      );
   }
 
   return undefined;

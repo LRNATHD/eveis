@@ -1,6 +1,13 @@
 import { calmTitle } from "../core/dehype.js";
 import type { FeedItem, SieveConfig } from "../types.js";
-import { applyHtmlFlags, bootSiteAdapter, pauseAllMedia } from "./shared.js";
+import {
+  applyHtmlFlags,
+  bootSiteAdapter,
+  createRafScheduler,
+  evaluateDomBatch,
+  pauseAllMedia,
+  rememberBounded,
+} from "./shared.js";
 
 const SPONSORED_LABELS = new Set(["ad", "sponsored", "paid partnership"]);
 const SUGGESTED_LABELS = new Set([
@@ -12,7 +19,6 @@ const SUGGESTED_LABELS = new Set([
 const ZERO_WIDTH_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
 
 let activeConfig: SieveConfig | null = null;
-let scanPending = false;
 const evaluatedIgPosts = new Set<string>();
 
 function readHeaderLabels(article: HTMLElement): string[] {
@@ -111,9 +117,8 @@ async function evaluateUnfollowedHomeArticles(main: HTMLElement): Promise<void> 
       authorLink?.getAttribute("href")?.replace(/^\/|\/$/g, "").split("/")[0] ?? undefined;
     const text = article.textContent?.replace(/\s+/g, " ").trim().slice(0, 220) ?? "";
     const id = href || `ig_dom_${idx}_${text.slice(0, 24)}`;
-    if (!id || evaluatedIgPosts.has(id)) return;
+    if (!id || !rememberBounded(evaluatedIgPosts, id)) return;
 
-    evaluatedIgPosts.add(id);
     articleById.set(id, article);
     batch.push({
       platform: "instagram",
@@ -125,27 +130,16 @@ async function evaluateUnfollowedHomeArticles(main: HTMLElement): Promise<void> 
     });
   });
 
-  if (batch.length === 0) return;
-
-  try {
-    const res = (await browser.runtime.sendMessage({
-      type: "EVALUATE_SSR_ITEMS",
-      items: batch,
-    })) as { dropped?: string[] };
-    for (const dropId of res.dropped ?? []) {
-      const article = articleById.get(dropId);
-      if (article) {
-        article.dataset.sieveHidden = "1";
-        pauseAllMedia(article);
-      }
+  await evaluateDomBatch(batch, (dropId) => {
+    const article = articleById.get(dropId);
+    if (article) {
+      article.dataset.sieveHidden = "1";
+      pauseAllMedia(article);
     }
-  } catch {
-    // Fail open when background reloads.
-  }
+  });
 }
 
 function sweepInstagramDom(): void {
-  scanPending = false;
   const path = window.location.pathname;
   const igOn = Boolean(activeConfig?.enabled && activeConfig.instagram.enabled);
   const main = document.querySelector<HTMLElement>('main[role="main"], main');
@@ -189,16 +183,13 @@ function sweepInstagramDom(): void {
   void evaluateUnfollowedHomeArticles(main);
 }
 
-function scheduleSweep(): void {
-  if (scanPending) return;
-  scanPending = true;
-  requestAnimationFrame(sweepInstagramDom);
-}
+const scheduleSweep = createRafScheduler(sweepInstagramDom);
 
 bootSiteAdapter((cfg) => {
   activeConfig = cfg;
   const igOn = cfg.enabled && cfg.instagram.enabled;
   applyHtmlFlags({
+    sieveIgOn: igOn ? "1" : "0",
     sieveIgClutter: igOn && cfg.instagram.hideClutter ? "1" : "0",
   });
   scheduleSweep();

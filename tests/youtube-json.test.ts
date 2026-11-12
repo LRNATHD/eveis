@@ -5,6 +5,7 @@ import {
   filterYouTubeJson,
   rewriteYouTubeHtmlInitialData,
 } from "../src/adapters/youtube-json.js";
+import type { FeedItem } from "../src/types.js";
 
 describe("decodeUtf8Chunks", () => {
   it("reassembles multi-byte UTF-8 characters split across chunks without replacement chars", () => {
@@ -204,7 +205,7 @@ describe("filterYouTubeJson", () => {
       ],
     };
 
-    let extracted: unknown;
+    let extracted: FeedItem | undefined;
     await filterYouTubeJson(payload, "/youtubei/v1/browse", "https://www.youtube.com/", DEFAULT_CONFIG, async (items) => {
       extracted = items[0];
       return new Set();

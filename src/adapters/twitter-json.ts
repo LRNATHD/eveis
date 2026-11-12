@@ -1,12 +1,13 @@
 import { calmTitle, midFrameThumbUrl } from "../core/dehype.js";
 import { extractYouTubeIdsFromText } from "../core/sieve.js";
-import type { BatchDecider, FeedItem, FeedSurface, SieveConfig } from "../types.js";
-
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(v: unknown): v is JsonRecord {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+import {
+  isRecord,
+  type BatchDecider,
+  type FeedItem,
+  type FeedSurface,
+  type JsonRecord,
+  type SieveConfig,
+} from "../types.js";
 
 const NOISE_ENTRY_PREFIXES = [
   "promoted-",
@@ -198,11 +199,9 @@ function readUserFollowFlag(userContainer: unknown): {
   id?: string;
   handle?: string;
   following: boolean;
-  isBlue: boolean;
 } {
-  if (!isRecord(userContainer)) return { following: false, isBlue: false };
+  if (!isRecord(userContainer)) return { following: false };
   const id = typeof userContainer.rest_id === "string" ? userContainer.rest_id : undefined;
-  const isBlue = userContainer.is_blue_verified === true;
   let handle: string | undefined;
   let following = false;
 
@@ -218,7 +217,7 @@ function readUserFollowFlag(userContainer: unknown): {
   ) {
     following = true;
   }
-  return { id, handle, following, isBlue };
+  return { id, handle, following };
 }
 
 function extractTweetItem(
@@ -237,7 +236,7 @@ function extractTweetItem(
   const outerAuthor =
     isRecord(tweet.core) && isRecord(tweet.core.user_results)
       ? readUserFollowFlag(tweet.core.user_results.result)
-      : { following: false, isBlue: false };
+      : { following: false };
 
   let innerFollowed = false;
   if (isRecord(legacy.retweeted_status_result)) {
@@ -260,7 +259,6 @@ function extractTweetItem(
     creatorId: outerAuthor.id,
     creatorHandle: outerAuthor.handle,
     isFollowed,
-    isBlueReply: surface === "replies" && outerAuthor.isBlue,
     surface,
     titleOrText: text,
     ...(secondaryText ? { secondaryText } : {}),
@@ -411,7 +409,7 @@ export async function filterTwitterJson(
 
   walkInstructions(data);
 
-  if (candidates.size === 0 || !config.x.caliberFilter || isAdsOnlySurface) {
+  if (candidates.size === 0) {
     return data;
   }
 

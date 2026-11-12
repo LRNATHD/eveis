@@ -1,8 +1,13 @@
 import { getCachedDeArrowTitle, isVagueClickbaitTitle } from "../core/dearrow.js";
-import { calmTitle, midFrameThumbUrl } from "../core/dehype.js";
-import type { BatchDecider, FeedItem, FeedSurface, SieveConfig } from "../types.js";
-
-type JsonRecord = Record<string, unknown>;
+import { calmTitle, isYouTubeSafeRoute, midFrameThumbUrl } from "../core/dehype.js";
+import {
+  isRecord,
+  type BatchDecider,
+  type FeedItem,
+  type FeedSurface,
+  type JsonRecord,
+  type SieveConfig,
+} from "../types.js";
 
 const VIDEO_RENDERER_KEYS = [
   "videoRenderer",
@@ -35,22 +40,6 @@ const PRUNABLE_WRAPPERS = new Set([
   "contents",
   "itemSectionRenderer",
 ]);
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function isYouTubeSafeRoute(pageUrl: string): boolean {
-  try {
-    const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
-    if (pathname === "/" || pathname === "/watch" || pathname === "/results") {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function isYouTubeChannelPayload(data: unknown): boolean {
   if (!isRecord(data)) return false;
@@ -382,9 +371,7 @@ export async function filterYouTubeJson(
   collectAndStripNoise(data);
 
   const droppedIds =
-    candidates.size > 0 && !safeRoute && config.youtube.caliberFilter
-      ? await decide([...candidates.values()])
-      : new Set<string>();
+    candidates.size > 0 ? await decide([...candidates.values()]) : new Set<string>();
 
   function applyVerdictsAndDehype(node: unknown): boolean {
     if (Array.isArray(node)) {
@@ -488,7 +475,7 @@ export async function rewriteYouTubeHtmlInitialData(
   if (closeBrace === -1) return html;
 
   try {
-    const parsed = JSON.parse(html.slice(openBrace, closeBrace + 1)) as unknown;
+    const parsed: unknown = JSON.parse(html.slice(openBrace, closeBrace + 1));
     const filtered = await filterYouTubeJson(parsed, "/youtubei/v1/browse", pageUrl, config, decide);
     const safeSerialized = JSON.stringify(filtered).replace(/<\//g, "<\\/");
     return html.slice(0, openBrace) + safeSerialized + html.slice(closeBrace + 1);

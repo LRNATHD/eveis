@@ -1,11 +1,5 @@
 import { calmTitle } from "../core/dehype.js";
-import type { BatchDecider, FeedItem, SieveConfig } from "../types.js";
-
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(v: unknown): v is JsonRecord {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+import { isRecord, type BatchDecider, type FeedItem, type SieveConfig } from "../types.js";
 
 export function rewriteTikTokThemeCookieHeader(cookieHeader: string): string {
   const parts = cookieHeader
@@ -101,12 +95,11 @@ export async function filterTikTokJson(
       metrics: {
         likes: typeof stats.diggCount === "number" ? stats.diggCount : undefined,
         replies: typeof stats.commentCount === "number" ? stats.commentCount : undefined,
-        views: typeof stats.playCount === "number" ? stats.playCount : undefined,
       },
     });
   }
 
-  if (candidates.size === 0 || !config.tiktok.caliberFilter || isProfileSurface) return data;
+  if (candidates.size === 0) return data;
 
   const droppedIds = await decide([...candidates.values()]);
   if (droppedIds.size === 0) return data;

@@ -1,7 +1,12 @@
 "use strict";
 (() => {
+  // src/types.ts
+  function isRecord(v) {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+  }
+
   // src/defaults.ts
-  var CURRENT_SCHEMA_VERSION = 6;
+  var SCHEMA_VERSION = 1;
   var DEFAULT_RUBRIC = `Evaluate each item across four axes:
 1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
 2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
@@ -14,7 +19,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
   var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
   var DEFAULT_CONFIG = {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
+    schemaVersion: SCHEMA_VERSION,
     enabled: true,
     passFollowed: true,
     noveltyFilter: true,
@@ -60,35 +65,68 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     allowHandles: [],
     blockHandles: []
   };
+  function readStringList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => typeof item === "string");
+  }
+  function bool(obj, key, fallback) {
+    return typeof obj[key] === "boolean" ? obj[key] : fallback;
+  }
   function mergeConfig(stored) {
-    if (!stored || typeof stored !== "object") return structuredClone(DEFAULT_CONFIG);
-    const oldSchema = stored.schemaVersion ?? 1;
-    const mergedTikTok = { ...DEFAULT_CONFIG.tiktok, ...stored.tiktok ?? {} };
-    if (oldSchema < 2) {
-      mergedTikTok.postOnlyMode = false;
-    }
-    if (oldSchema < 4 && stored.tiktok?.lightMode === void 0) {
-      mergedTikTok.lightMode = true;
-    }
-    const mergedGrader = { ...DEFAULT_CONFIG.grader, ...stored.grader ?? {} };
-    if (oldSchema < 6 && mergedGrader.streamHoldMs <= 900) {
-      mergedGrader.streamHoldMs = 1500;
-    }
-    if (oldSchema < 5 && (!stored.grader?.rubric || stored.grader.rubric.startsWith("Keep genuine human craft") || stored.grader.rubric.startsWith("Keep enticing, high-agency"))) {
-      mergedGrader.rubric = DEFAULT_RUBRIC;
-    }
+    if (!isRecord(stored)) return structuredClone(DEFAULT_CONFIG);
+    const yt = isRecord(stored.youtube) ? stored.youtube : {};
+    const x = isRecord(stored.x) ? stored.x : {};
+    const ig = isRecord(stored.instagram) ? stored.instagram : {};
+    const tt = isRecord(stored.tiktok) ? stored.tiktok : {};
+    const gr = isRecord(stored.grader) ? stored.grader : {};
+    const d = DEFAULT_CONFIG;
+    const mode = gr.mode === "off" || gr.mode === "local" || gr.mode === "api" ? gr.mode : d.grader.mode;
     return {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      enabled: stored.enabled ?? DEFAULT_CONFIG.enabled,
-      passFollowed: stored.passFollowed ?? DEFAULT_CONFIG.passFollowed,
-      noveltyFilter: stored.noveltyFilter ?? DEFAULT_CONFIG.noveltyFilter,
-      youtube: { ...DEFAULT_CONFIG.youtube, ...stored.youtube ?? {} },
-      x: { ...DEFAULT_CONFIG.x, ...stored.x ?? {} },
-      instagram: { ...DEFAULT_CONFIG.instagram, ...stored.instagram ?? {} },
-      tiktok: mergedTikTok,
-      grader: mergedGrader,
-      allowHandles: Array.isArray(stored.allowHandles) ? [...stored.allowHandles] : [],
-      blockHandles: Array.isArray(stored.blockHandles) ? [...stored.blockHandles] : []
+      schemaVersion: SCHEMA_VERSION,
+      enabled: bool(stored, "enabled", d.enabled),
+      passFollowed: bool(stored, "passFollowed", d.passFollowed),
+      noveltyFilter: bool(stored, "noveltyFilter", d.noveltyFilter),
+      youtube: {
+        enabled: bool(yt, "enabled", d.youtube.enabled),
+        caliberFilter: bool(yt, "caliberFilter", d.youtube.caliberFilter),
+        hideShorts: bool(yt, "hideShorts", d.youtube.hideShorts),
+        cleanHeader: bool(yt, "cleanHeader", d.youtube.cleanHeader),
+        midFrameThumbs: bool(yt, "midFrameThumbs", d.youtube.midFrameThumbs),
+        calmTitles: bool(yt, "calmTitles", d.youtube.calmTitles),
+        dearrowTitles: bool(yt, "dearrowTitles", d.youtube.dearrowTitles)
+      },
+      x: {
+        enabled: bool(x, "enabled", d.x.enabled),
+        caliberFilter: bool(x, "caliberFilter", d.x.caliberFilter),
+        slopCadenceFilter: bool(x, "slopCadenceFilter", d.x.slopCadenceFilter),
+        classicBird: bool(x, "classicBird", d.x.classicBird),
+        cleanSidebar: bool(x, "cleanSidebar", d.x.cleanSidebar),
+        cleanNav: bool(x, "cleanNav", d.x.cleanNav),
+        restoreHeadlines: bool(x, "restoreHeadlines", d.x.restoreHeadlines)
+      },
+      instagram: {
+        enabled: bool(ig, "enabled", d.instagram.enabled),
+        caliberFilter: bool(ig, "caliberFilter", d.instagram.caliberFilter),
+        filterReels: bool(ig, "filterReels", d.instagram.filterReels),
+        hideClutter: bool(ig, "hideClutter", d.instagram.hideClutter)
+      },
+      tiktok: {
+        enabled: bool(tt, "enabled", d.tiktok.enabled),
+        caliberFilter: bool(tt, "caliberFilter", d.tiktok.caliberFilter),
+        cleanChrome: bool(tt, "cleanChrome", d.tiktok.cleanChrome),
+        lightMode: bool(tt, "lightMode", d.tiktok.lightMode),
+        postOnlyMode: bool(tt, "postOnlyMode", d.tiktok.postOnlyMode)
+      },
+      grader: {
+        mode,
+        endpoint: typeof gr.endpoint === "string" ? gr.endpoint : d.grader.endpoint,
+        model: typeof gr.model === "string" ? gr.model : d.grader.model,
+        apiKey: typeof gr.apiKey === "string" ? gr.apiKey : d.grader.apiKey,
+        rubric: typeof gr.rubric === "string" ? gr.rubric : d.grader.rubric,
+        streamHoldMs: typeof gr.streamHoldMs === "number" && Number.isFinite(gr.streamHoldMs) ? gr.streamHoldMs : d.grader.streamHoldMs
+      },
+      allowHandles: readStringList(stored.allowHandles),
+      blockHandles: readStringList(stored.blockHandles)
     };
   }
 
@@ -334,16 +372,37 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     row.appendChild(toggle);
     return row;
   }
+  function renderCard(titleText, isOff, switches, config, save, headerAction) {
+    const card = document.createElement("section");
+    card.className = `card${isOff ? " is-off" : ""}`;
+    const head = document.createElement("div");
+    head.className = "card-head";
+    const title = document.createElement("span");
+    title.className = "card-title";
+    title.textContent = titleText;
+    head.appendChild(title);
+    if (headerAction) head.appendChild(headerAction);
+    card.appendChild(head);
+    const body = document.createElement("div");
+    body.className = "card-body";
+    for (const sw of switches) {
+      body.appendChild(renderSwitchRow(sw, config, save));
+    }
+    card.appendChild(body);
+    return card;
+  }
   async function initPopup() {
     const stored = await browser.storage.local.get("sieveConfig");
     const config = mergeConfig(stored.sieveConfig);
     const tabs = await browser.tabs.query({ active: true, currentWindow: true });
     const detected = detectPlatformFromUrl(tabs[0]?.url);
     const siteLabel = document.getElementById("active-site");
-    const masterInput = document.getElementById("master-enabled");
+    const rawMaster = document.getElementById("master-enabled");
+    const masterInput = rawMaster instanceof HTMLInputElement ? rawMaster : null;
     const primaryMount = document.getElementById("primary-mount");
     const secondaryMount = document.getElementById("secondary-mount");
-    const detailsEl = document.getElementById("other-platforms");
+    const rawDetails = document.getElementById("other-platforms");
+    const detailsEl = rawDetails instanceof HTMLDetailsElement ? rawDetails : null;
     const indicatorEl = document.getElementById("other-indicator");
     if (siteLabel) {
       const matchedCard = PLATFORM_CARDS.find((p) => p.id === detected);
@@ -367,71 +426,33 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       });
     }
     function renderUniversalAndSitesGeneralView(mount) {
-      const sitesCard = document.createElement("section");
-      sitesCard.className = `card${!config.enabled ? " is-off" : ""}`;
-      const sitesHead = document.createElement("div");
-      sitesHead.className = "card-head";
-      const sitesTitle = document.createElement("span");
-      sitesTitle.className = "card-title";
-      sitesTitle.textContent = "active platforms";
-      sitesHead.appendChild(sitesTitle);
-      sitesCard.appendChild(sitesHead);
-      const sitesBody = document.createElement("div");
-      sitesBody.className = "card-body";
-      for (const p of PLATFORM_CARDS) {
-        sitesBody.appendChild(
-          renderSwitchRow(
-            {
-              label: p.title,
-              get: p.enabledGet,
-              set: p.enabledSet
-            },
-            config,
-            saveAndRerender
-          )
-        );
-      }
-      sitesCard.appendChild(sitesBody);
-      mount.appendChild(sitesCard);
-      const uniCard = document.createElement("section");
-      uniCard.className = `card${!config.enabled ? " is-off" : ""}`;
-      const uniHead = document.createElement("div");
-      uniHead.className = "card-head";
-      const uniTitle = document.createElement("span");
-      uniTitle.className = "card-title";
-      uniTitle.textContent = "universal";
-      uniHead.appendChild(uniTitle);
-      uniCard.appendChild(uniHead);
-      const uniBody = document.createElement("div");
-      uniBody.className = "card-body";
-      for (const sw of UNIVERSAL_SWITCHES) {
-        uniBody.appendChild(renderSwitchRow(sw, config, saveAndRerender));
-      }
-      uniCard.appendChild(uniBody);
-      mount.appendChild(uniCard);
+      const platformSwitches = PLATFORM_CARDS.map((p) => ({
+        label: p.title,
+        get: p.enabledGet,
+        set: p.enabledSet
+      }));
+      mount.appendChild(
+        renderCard("active platforms", !config.enabled, platformSwitches, config, saveAndRerender)
+      );
+      mount.appendChild(
+        renderCard("universal", !config.enabled, UNIVERSAL_SWITCHES, config, saveAndRerender)
+      );
     }
     function renderActivePlatformView(primarySpec, mount, otherMount) {
-      const card = document.createElement("section");
-      card.className = `card${!config.enabled || !primarySpec.enabledGet(config) ? " is-off" : ""}`;
-      const head = document.createElement("div");
-      head.className = "card-head";
-      const title = document.createElement("span");
-      title.className = "card-title";
-      title.textContent = primarySpec.title;
       const siteSwitch = makeSwitchInput(primarySpec.enabledGet(config), (val) => {
         primarySpec.enabledSet(config, val);
         void saveAndRerender();
       });
-      head.appendChild(title);
-      head.appendChild(siteSwitch);
-      const body = document.createElement("div");
-      body.className = "card-body";
-      for (const sw of primarySpec.switches) {
-        body.appendChild(renderSwitchRow(sw, config, saveAndRerender));
-      }
-      card.appendChild(head);
-      card.appendChild(body);
-      mount.appendChild(card);
+      mount.appendChild(
+        renderCard(
+          primarySpec.title,
+          !config.enabled || !primarySpec.enabledGet(config),
+          primarySpec.switches,
+          config,
+          saveAndRerender,
+          siteSwitch
+        )
+      );
       const uniGroup = document.createElement("div");
       uniGroup.className = "sub-group";
       const uniTitle = document.createElement("div");
@@ -482,7 +503,9 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     renderAll();
     try {
       const status = await browser.runtime.sendMessage({ type: "GET_STATUS" });
-      cachedCount = status.sessionFilteredCount ?? 0;
+      if (isRecord(status) && typeof status.sessionFilteredCount === "number") {
+        cachedCount = status.sessionFilteredCount;
+      }
       updateStatusMode();
     } catch {
       if (statusLine) statusLine.textContent = DEFAULT_CONFIG.grader.mode;
@@ -493,7 +516,10 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     });
   }
   if (typeof browser !== "undefined" && browser.storage) {
+    void initOptionsThemeGuard();
     void initPopup();
+  }
+  function initOptionsThemeGuard() {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
       document.documentElement.classList.add("theme-switching");
       void document.documentElement.offsetHeight;

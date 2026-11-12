@@ -1,24 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../src/defaults.js";
-import type { FeedItem, MemoryStore, SeedSets, SieveConfig } from "../src/types.js";
-import {
-  gradeItemsBatch,
-  parseDropResponse,
-  parseIndexedVerdicts,
-} from "../src/core/llm.js";
+import type { FeedItem, MemoryStore, ResolvedVerdict, SeedSets, SieveConfig } from "../src/types.js";
+import { gradeItemsBatch, parseIndexedVerdicts } from "../src/core/llm.js";
 import { runSieveOnBatch } from "../src/core/sieve.js";
 
-describe("parseDropResponse", () => {
-  it("parses plain JSON and markdown-fenced JSON responses", () => {
-    const valid = new Set(["a", "b", "c"]);
-    expect([...parseDropResponse('{"drop":["b"]}', valid)]).toEqual(["b"]);
+describe("parseIndexedVerdicts", () => {
+  it("parses plain JSON and markdown-fenced drop arrays", () => {
+    const valid = ["a", "b", "c"];
+    expect([...parseIndexedVerdicts('{"drop":["b"]}', valid)]).toEqual(["b"]);
     expect([
-      ...parseDropResponse('Here is the result:\n```json\n{"drop": ["a", "ghost"]}\n```', valid),
+      ...parseIndexedVerdicts('Here is the result:\n```json\n{"drop": ["a", "ghost"]}\n```', valid),
     ]).toEqual(["a"]);
   });
 
   it("returns empty set on malformed output", () => {
-    expect(parseDropResponse("not json at all", new Set(["a"])).size).toBe(0);
+    expect(parseIndexedVerdicts("not json at all", ["a"]).size).toBe(0);
   });
 
   it("maps 3-way indexed verdicts (k / u / d) so only confident d entries drop", () => {
@@ -47,7 +43,7 @@ describe("gradeItemsBatch and runSieveOnBatch", () => {
   ];
 
   it("grades unseen items via OpenAI-compatible chat endpoint and records memory", async () => {
-    const recorded: Array<[string, "keep" | "drop"]> = [];
+    const recorded: Array<[string, ResolvedVerdict]> = [];
     const memory: MemoryStore = {
       getItemVerdict: () => undefined,
       getCreatorVerdict: () => undefined,
@@ -79,7 +75,7 @@ describe("gradeItemsBatch and runSieveOnBatch", () => {
   });
 
   it("fails open within streamHoldMs when LLM is slow, while populating cache when it finishes", async () => {
-    const recorded: Array<[string, "keep" | "drop"]> = [];
+    const recorded: Array<[string, ResolvedVerdict]> = [];
     const memory: MemoryStore = {
       getItemVerdict: () => undefined,
       getCreatorVerdict: () => undefined,
@@ -125,6 +121,33 @@ describe("gradeItemsBatch and runSieveOnBatch", () => {
       ["craft1", "keep"],
       ["slop2", "drop"],
     ]);
+  });
+
+  it("throws from gradeItemsBatch on HTTP errors and fails open in runSieveOnBatch without poisoning memory", async () => {
+    const recorded: Array<[string, ResolvedVerdict]> = [];
+    const memory: MemoryStore = {
+      getItemVerdict: () => undefined,
+      getCreatorVerdict: () => undefined,
+      recordVerdict: async (item, v) => {
+        recorded.push([item.id, v]);
+      },
+      clear: async () => {},
+      counts: () => ({ cachedItems: 0, learnedCreators: 0, droppedTotal: 0 }),
+    };
+    const seeds: SeedSets = {
+      hnVideos: new Set(),
+      hnChannels: new Set(),
+      slopChannels: new Set(),
+    };
+    const failingFetch: typeof fetch = async () => new Response("Unavailable", { status: 503 });
+
+    await expect(gradeItemsBatch(sampleItems, DEFAULT_CONFIG, failingFetch)).rejects.toThrow(
+      "HTTP 503",
+    );
+
+    const dropped = await runSieveOnBatch(sampleItems, DEFAULT_CONFIG, seeds, memory, failingFetch);
+    expect(dropped.size).toBe(0);
+    expect(recorded).toEqual([]);
   });
 
   it("returns empty drop set when grader mode is off", async () => {

@@ -1,6 +1,13 @@
 import { calmTitle } from "../core/dehype.js";
 import type { FeedItem, SieveConfig } from "../types.js";
-import { applyHtmlFlags, bootSiteAdapter, pauseAllMedia } from "./shared.js";
+import {
+  applyHtmlFlags,
+  bootSiteAdapter,
+  createRafScheduler,
+  evaluateDomBatch,
+  pauseAllMedia,
+  rememberBounded,
+} from "./shared.js";
 
 const LEFT_NAV_DROP_LABELS = new Set([
   "explore",
@@ -36,7 +43,6 @@ const CHROME_BUTTON_BLOCK_LABELS = new Set([
 
 let activeConfig: SieveConfig | null = null;
 let lastCheckedPath = "";
-let sweepPending = false;
 const evaluatedDomIds = new Set<string>();
 
 function normalizeTikTokPath(rawPath: string): string {
@@ -87,7 +93,6 @@ function collapseLeftNavRowsWithoutGaps(): void {
 
   Array.from(listParent.children).forEach((child) => {
     if (!(child instanceof HTMLElement)) return;
-    // Never hide rows that hold For You, Following, Upload, Messages, Activity, or Profile.
     if (
       child.querySelector(
         '[data-e2e="nav-foryou"], [data-e2e="nav-following"], [data-e2e="nav-messages"], [data-e2e="nav-activity"], [data-e2e="nav-profile"], a[href="/upload"], a[href*="/tiktokstudio"]',
@@ -126,7 +131,6 @@ function cleanTikTokChromeDom(): void {
 
   collapseLeftNavRowsWithoutGaps();
 
-  // Hide Get Coins / Get App buttons in top header or fixed floating containers
   document.querySelectorAll<HTMLElement>("button, a").forEach((el) => {
     const label = (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase();
     if (!CHROME_BUTTON_BLOCK_LABELS.has(label)) return;
@@ -143,7 +147,6 @@ function cleanTikTokChromeDom(): void {
     wrapper.dataset.sieveTtHidden = "1";
   });
 
-  // Hide Following accounts & Company/Program/Terms sections in the left navigation rail
   const sideContainers = document.querySelectorAll<HTMLElement>(
     'div[class*="SideNav"], aside, nav',
   );
@@ -223,9 +226,8 @@ async function evaluateAndPolishFeedDom(): Promise<void> {
       card.textContent?.slice(0, 220).trim() ??
       "";
     const id = vidMatch?.[1] ?? (handle && descText ? `dom_${handle}_${descText.slice(0, 32)}_${idx}` : "");
-    if (!id || evaluatedDomIds.has(id)) return;
+    if (!id || !rememberBounded(evaluatedDomIds, id)) return;
 
-    evaluatedDomIds.add(id);
     cardById.set(id, card);
     batch.push({
       platform: "tiktok",
@@ -236,24 +238,13 @@ async function evaluateAndPolishFeedDom(): Promise<void> {
     });
   });
 
-  if (batch.length === 0) return;
-
-  try {
-    const res = (await browser.runtime.sendMessage({
-      type: "EVALUATE_SSR_ITEMS",
-      items: batch,
-    })) as { dropped?: string[] };
-
-    for (const dropId of res.dropped ?? []) {
-      const card = cardById.get(dropId);
-      if (card) {
-        card.dataset.sieveTtDropped = "1";
-        pauseAllMedia(card);
-      }
+  await evaluateDomBatch(batch, (dropId) => {
+    const card = cardById.get(dropId);
+    if (card) {
+      card.dataset.sieveTtDropped = "1";
+      pauseAllMedia(card);
     }
-  } catch {
-    // Fail open if background is reloading.
-  }
+  });
 }
 
 function enforceTikTokLightMode(enabled: boolean): void {
@@ -271,17 +262,17 @@ function enforceTikTokLightMode(enabled: boolean): void {
       window.location.reload();
     }
   } catch {
-    // Ignore cookie write errors in sandboxed frames.
+    // Sandboxed frames may block cookie or sessionStorage writes.
   }
 }
 
 function runTikTokSweep(): void {
-  sweepPending = false;
   const ttOn = Boolean(activeConfig?.enabled && activeConfig.tiktok.enabled);
   const blockFeed = shouldMuteAndHideFeed();
   const forceLight = Boolean(ttOn && activeConfig?.tiktok.lightMode);
 
   applyHtmlFlags({
+    sieveTtOn: ttOn ? "1" : "0",
     sieveTtBlock: blockFeed ? "1" : "0",
     sieveTtChrome: ttOn && activeConfig?.tiktok.cleanChrome ? "1" : "0",
     sieveTtLight: forceLight ? "1" : "0",
@@ -298,11 +289,7 @@ function runTikTokSweep(): void {
   void evaluateAndPolishFeedDom();
 }
 
-function scheduleSweep(): void {
-  if (sweepPending) return;
-  sweepPending = true;
-  requestAnimationFrame(runTikTokSweep);
-}
+const scheduleSweep = createRafScheduler(runTikTokSweep);
 
 document.addEventListener(
   "play",

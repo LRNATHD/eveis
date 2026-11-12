@@ -110,6 +110,6 @@ html[data-sieve-x-nav="1"] [data-testid="verified_profile_visitor_upsell"] {
   display: none !important;
 }
 
-[data-sieve-x-dropped="1"] {
+html[data-sieve-x-on="1"] [data-sieve-x-dropped="1"] {
   display: none !important;
 }

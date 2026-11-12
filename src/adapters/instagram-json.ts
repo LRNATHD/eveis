@@ -1,11 +1,12 @@
 import { calmTitle } from "../core/dehype.js";
-import type { BatchDecider, FeedItem, FeedSurface, SieveConfig } from "../types.js";
-
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(v: unknown): v is JsonRecord {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+import {
+  isRecord,
+  type BatchDecider,
+  type FeedItem,
+  type FeedSurface,
+  type JsonRecord,
+  type SieveConfig,
+} from "../types.js";
 
 function isMediaAd(media: JsonRecord, wrapper?: JsonRecord): boolean {
   if (media.ad_id || media.is_ad === true || media.is_organic_product_tagging_eligible === false && media.ad_action) {
@@ -63,7 +64,6 @@ function extractIgMedia(media: JsonRecord, surface: FeedSurface): FeedItem | nul
   const durationSec = typeof media.video_duration === "number" ? media.video_duration : undefined;
   const likes = typeof media.like_count === "number" ? media.like_count : undefined;
   const replies = typeof media.comment_count === "number" ? media.comment_count : undefined;
-  const views = typeof media.play_count === "number" ? media.play_count : undefined;
 
   return {
     platform: "instagram",
@@ -75,7 +75,7 @@ function extractIgMedia(media: JsonRecord, surface: FeedSurface): FeedItem | nul
     titleOrText: captionText || `@${creatorHandle ?? "reel"}`,
     secondaryText,
     durationSec,
-    metrics: { likes, replies, views },
+    metrics: { likes, replies },
   };
 }
 
@@ -104,7 +104,6 @@ export async function filterInstagramJson(
 
   interface MediaSlot {
     list: unknown[];
-    id: string;
     getMediaId: (el: unknown) => string;
   }
 
@@ -147,7 +146,6 @@ export async function filterInstagramJson(
       candidates.set(item.id, item);
       slots.push({
         list: edges,
-        id: item.id,
         getMediaId: (el) => {
           const m = getMediaFromEdge(el);
           const raw = m?.pk ?? m?.id ?? m?.code;
@@ -181,7 +179,6 @@ export async function filterInstagramJson(
         candidates.set(item.id, item);
         slots.push({
           list: items,
-          id: item.id,
           getMediaId: (el) => {
             const m = isRecord(el) && isRecord(el.media) ? el.media : isRecord(el) ? el : null;
             const raw = m?.pk ?? m?.id ?? m?.code;
@@ -213,7 +210,6 @@ export async function filterInstagramJson(
         candidates.set(item.id, item);
         slots.push({
           list: feedItems,
-          id: item.id,
           getMediaId: (el) => {
             const m = isRecord(el) && isRecord(el.media_or_ad) ? el.media_or_ad : null;
             const raw = m?.pk ?? m?.id ?? m?.code;

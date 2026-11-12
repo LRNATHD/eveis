@@ -1,7 +1,12 @@
 "use strict";
 (() => {
+  // src/types.ts
+  function isRecord(v) {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+  }
+
   // src/defaults.ts
-  var CURRENT_SCHEMA_VERSION = 6;
+  var SCHEMA_VERSION = 1;
   var DEFAULT_RUBRIC = `Evaluate each item across four axes:
 1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
 2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
@@ -16,7 +21,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   var API_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
   var API_DEFAULT_MODEL = "gemini-2.5-flash";
   var DEFAULT_CONFIG = {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
+    schemaVersion: SCHEMA_VERSION,
     enabled: true,
     passFollowed: true,
     noveltyFilter: true,
@@ -62,35 +67,68 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     allowHandles: [],
     blockHandles: []
   };
+  function readStringList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => typeof item === "string");
+  }
+  function bool(obj, key, fallback) {
+    return typeof obj[key] === "boolean" ? obj[key] : fallback;
+  }
   function mergeConfig(stored) {
-    if (!stored || typeof stored !== "object") return structuredClone(DEFAULT_CONFIG);
-    const oldSchema = stored.schemaVersion ?? 1;
-    const mergedTikTok = { ...DEFAULT_CONFIG.tiktok, ...stored.tiktok ?? {} };
-    if (oldSchema < 2) {
-      mergedTikTok.postOnlyMode = false;
-    }
-    if (oldSchema < 4 && stored.tiktok?.lightMode === void 0) {
-      mergedTikTok.lightMode = true;
-    }
-    const mergedGrader = { ...DEFAULT_CONFIG.grader, ...stored.grader ?? {} };
-    if (oldSchema < 6 && mergedGrader.streamHoldMs <= 900) {
-      mergedGrader.streamHoldMs = 1500;
-    }
-    if (oldSchema < 5 && (!stored.grader?.rubric || stored.grader.rubric.startsWith("Keep genuine human craft") || stored.grader.rubric.startsWith("Keep enticing, high-agency"))) {
-      mergedGrader.rubric = DEFAULT_RUBRIC;
-    }
+    if (!isRecord(stored)) return structuredClone(DEFAULT_CONFIG);
+    const yt = isRecord(stored.youtube) ? stored.youtube : {};
+    const x = isRecord(stored.x) ? stored.x : {};
+    const ig = isRecord(stored.instagram) ? stored.instagram : {};
+    const tt = isRecord(stored.tiktok) ? stored.tiktok : {};
+    const gr = isRecord(stored.grader) ? stored.grader : {};
+    const d = DEFAULT_CONFIG;
+    const mode = gr.mode === "off" || gr.mode === "local" || gr.mode === "api" ? gr.mode : d.grader.mode;
     return {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      enabled: stored.enabled ?? DEFAULT_CONFIG.enabled,
-      passFollowed: stored.passFollowed ?? DEFAULT_CONFIG.passFollowed,
-      noveltyFilter: stored.noveltyFilter ?? DEFAULT_CONFIG.noveltyFilter,
-      youtube: { ...DEFAULT_CONFIG.youtube, ...stored.youtube ?? {} },
-      x: { ...DEFAULT_CONFIG.x, ...stored.x ?? {} },
-      instagram: { ...DEFAULT_CONFIG.instagram, ...stored.instagram ?? {} },
-      tiktok: mergedTikTok,
-      grader: mergedGrader,
-      allowHandles: Array.isArray(stored.allowHandles) ? [...stored.allowHandles] : [],
-      blockHandles: Array.isArray(stored.blockHandles) ? [...stored.blockHandles] : []
+      schemaVersion: SCHEMA_VERSION,
+      enabled: bool(stored, "enabled", d.enabled),
+      passFollowed: bool(stored, "passFollowed", d.passFollowed),
+      noveltyFilter: bool(stored, "noveltyFilter", d.noveltyFilter),
+      youtube: {
+        enabled: bool(yt, "enabled", d.youtube.enabled),
+        caliberFilter: bool(yt, "caliberFilter", d.youtube.caliberFilter),
+        hideShorts: bool(yt, "hideShorts", d.youtube.hideShorts),
+        cleanHeader: bool(yt, "cleanHeader", d.youtube.cleanHeader),
+        midFrameThumbs: bool(yt, "midFrameThumbs", d.youtube.midFrameThumbs),
+        calmTitles: bool(yt, "calmTitles", d.youtube.calmTitles),
+        dearrowTitles: bool(yt, "dearrowTitles", d.youtube.dearrowTitles)
+      },
+      x: {
+        enabled: bool(x, "enabled", d.x.enabled),
+        caliberFilter: bool(x, "caliberFilter", d.x.caliberFilter),
+        slopCadenceFilter: bool(x, "slopCadenceFilter", d.x.slopCadenceFilter),
+        classicBird: bool(x, "classicBird", d.x.classicBird),
+        cleanSidebar: bool(x, "cleanSidebar", d.x.cleanSidebar),
+        cleanNav: bool(x, "cleanNav", d.x.cleanNav),
+        restoreHeadlines: bool(x, "restoreHeadlines", d.x.restoreHeadlines)
+      },
+      instagram: {
+        enabled: bool(ig, "enabled", d.instagram.enabled),
+        caliberFilter: bool(ig, "caliberFilter", d.instagram.caliberFilter),
+        filterReels: bool(ig, "filterReels", d.instagram.filterReels),
+        hideClutter: bool(ig, "hideClutter", d.instagram.hideClutter)
+      },
+      tiktok: {
+        enabled: bool(tt, "enabled", d.tiktok.enabled),
+        caliberFilter: bool(tt, "caliberFilter", d.tiktok.caliberFilter),
+        cleanChrome: bool(tt, "cleanChrome", d.tiktok.cleanChrome),
+        lightMode: bool(tt, "lightMode", d.tiktok.lightMode),
+        postOnlyMode: bool(tt, "postOnlyMode", d.tiktok.postOnlyMode)
+      },
+      grader: {
+        mode,
+        endpoint: typeof gr.endpoint === "string" ? gr.endpoint : d.grader.endpoint,
+        model: typeof gr.model === "string" ? gr.model : d.grader.model,
+        apiKey: typeof gr.apiKey === "string" ? gr.apiKey : d.grader.apiKey,
+        rubric: typeof gr.rubric === "string" ? gr.rubric : d.grader.rubric,
+        streamHoldMs: typeof gr.streamHoldMs === "number" && Number.isFinite(gr.streamHoldMs) ? gr.streamHoldMs : d.grader.streamHoldMs
+      },
+      allowHandles: readStringList(stored.allowHandles),
+      blockHandles: readStringList(stored.blockHandles)
     };
   }
 
@@ -98,21 +136,31 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   function parseLines(raw) {
     return raw.split("\n").map((line) => line.trim()).filter(Boolean);
   }
+  function parseGraderMode(val) {
+    return val === "off" || val === "local" || val === "api" ? val : DEFAULT_CONFIG.grader.mode;
+  }
+  function requireElement(id, ctor) {
+    const el = document.getElementById(id);
+    if (!(el instanceof ctor)) {
+      throw new Error(`Missing element #${id}`);
+    }
+    return el;
+  }
   async function initOptions() {
     const stored = await browser.storage.local.get("sieveConfig");
     const config = mergeConfig(stored.sieveConfig);
-    const passFollowedEl = document.getElementById("pass-followed");
-    const noveltyFilterEl = document.getElementById("novelty-filter");
-    const modeEl = document.getElementById("grader-mode");
-    const holdEl = document.getElementById("grader-hold");
-    const endpointEl = document.getElementById("grader-endpoint");
-    const modelEl = document.getElementById("grader-model");
-    const keyEl = document.getElementById("grader-key");
-    const rubricEl = document.getElementById("grader-rubric");
-    const allowEl = document.getElementById("allow-handles");
-    const blockEl = document.getElementById("block-handles");
+    const passFollowedEl = requireElement("pass-followed", HTMLInputElement);
+    const noveltyFilterEl = requireElement("novelty-filter", HTMLInputElement);
+    const modeEl = requireElement("grader-mode", HTMLSelectElement);
+    const holdEl = requireElement("grader-hold", HTMLInputElement);
+    const endpointEl = requireElement("grader-endpoint", HTMLInputElement);
+    const modelEl = requireElement("grader-model", HTMLInputElement);
+    const keyEl = requireElement("grader-key", HTMLInputElement);
+    const rubricEl = requireElement("grader-rubric", HTMLTextAreaElement);
+    const allowEl = requireElement("allow-handles", HTMLTextAreaElement);
+    const blockEl = requireElement("block-handles", HTMLTextAreaElement);
+    const testBtn = requireElement("test-grader", HTMLButtonElement);
     const saveIndicator = document.getElementById("save-indicator");
-    const testBtn = document.getElementById("test-grader");
     const testResult = document.getElementById("test-result");
     const statsEl = document.getElementById("memory-stats");
     function populateFields() {
@@ -134,8 +182,11 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       saveTimer = setTimeout(() => {
         config.passFollowed = passFollowedEl.checked;
         config.noveltyFilter = noveltyFilterEl.checked;
-        config.grader.mode = modeEl.value;
-        config.grader.streamHoldMs = Math.max(100, Number.parseInt(holdEl.value, 10) || 650);
+        config.grader.mode = parseGraderMode(modeEl.value);
+        config.grader.streamHoldMs = Math.max(
+          100,
+          Number.parseInt(holdEl.value, 10) || DEFAULT_CONFIG.grader.streamHoldMs
+        );
         config.grader.endpoint = endpointEl.value.trim();
         config.grader.model = modelEl.value.trim();
         config.grader.apiKey = keyEl.value.trim();
@@ -148,7 +199,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       }, 180);
     }
     modeEl.addEventListener("change", () => {
-      const nextMode = modeEl.value;
+      const nextMode = parseGraderMode(modeEl.value);
       if (nextMode === "local" && endpointEl.value === API_DEFAULT_ENDPOINT) {
         endpointEl.value = LOCAL_DEFAULT_ENDPOINT;
         modelEl.value = LOCAL_DEFAULT_MODEL;
@@ -183,19 +234,21 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         const res = await browser.runtime.sendMessage({
           type: "TEST_GRADER",
           graderOverride: {
-            mode: modeEl.value,
+            mode: parseGraderMode(modeEl.value),
             endpoint: endpointEl.value.trim(),
             model: modelEl.value.trim(),
             apiKey: keyEl.value.trim(),
             rubric: rubricEl.value,
-            streamHoldMs: Number.parseInt(holdEl.value, 10) || 650
+            streamHoldMs: Number.parseInt(holdEl.value, 10) || DEFAULT_CONFIG.grader.streamHoldMs
           }
         });
-        if (testResult) {
-          if (!res.ok) {
-            testResult.textContent = `failed: ${res.error ?? "unreachable"}`;
+        if (testResult && isRecord(res)) {
+          if (res.ok !== true) {
+            const msg = typeof res.error === "string" ? res.error : "unreachable";
+            testResult.textContent = `failed: ${msg}`;
           } else {
-            testResult.textContent = `ok \xB7 ${res.ms ?? 0}ms \xB7 slop probe ${res.droppedProbeSlop ? "dropped" : "kept"}`;
+            const ms = typeof res.ms === "number" ? res.ms : 0;
+            testResult.textContent = `ok \xB7 ${ms}ms \xB7 slop probe ${res.droppedProbeSlop ? "dropped" : "kept"}`;
           }
         }
       } catch {
@@ -208,7 +261,13 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       if (!statsEl) return;
       try {
         const s = await browser.runtime.sendMessage({ type: "GET_STATUS" });
-        statsEl.textContent = `${(s.hnVideos ?? 0).toLocaleString()} hn videos \xB7 ${(s.slopChannels ?? 0).toLocaleString()} slop channels \xB7 ${s.cachedItems ?? 0} cached \xB7 ${s.learnedCreators ?? 0} creators \xB7 ${s.dwelledCount ?? 0} dwelled`;
+        if (!isRecord(s)) return;
+        const hnVideos = typeof s.hnVideos === "number" ? s.hnVideos : 0;
+        const slopChannels = typeof s.slopChannels === "number" ? s.slopChannels : 0;
+        const cachedItems = typeof s.cachedItems === "number" ? s.cachedItems : 0;
+        const learnedCreators = typeof s.learnedCreators === "number" ? s.learnedCreators : 0;
+        const dwelledCount = typeof s.dwelledCount === "number" ? s.dwelledCount : 0;
+        statsEl.textContent = `${hnVideos.toLocaleString()} hn videos \xB7 ${slopChannels.toLocaleString()} slop channels \xB7 ${cachedItems} cached \xB7 ${learnedCreators} creators \xB7 ${dwelledCount} dwelled`;
       } catch {
         statsEl.textContent = "stats unavailable";
       }

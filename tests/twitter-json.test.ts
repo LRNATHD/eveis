@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../src/defaults.js";
 import { filterTwitterJson } from "../src/adapters/twitter-json.js";
+import type { FeedItem } from "../src/types.js";
 
 describe("filterTwitterJson", () => {
   it("drops promoted tweets, who-to-follow modules, and decider-rejected unfollowed tweets while keeping followed tweets", async () => {
@@ -458,7 +459,7 @@ describe("filterTwitterJson", () => {
       },
     };
 
-    let captured: unknown[] = [];
+    let captured: FeedItem[] = [];
     await filterTwitterJson(payload, "/i/api/graphql/1/HomeTimeline", DEFAULT_CONFIG, async (items) => {
       captured = items;
       return new Set();
@@ -468,7 +469,7 @@ describe("filterTwitterJson", () => {
       id: "3001",
       secondaryText: expect.stringContaining("Femtosecond laser ablation"),
     });
-    expect((captured[0] as { secondaryText?: string }).secondaryText).toContain("[video]");
+    expect(captured[0]?.secondaryText).toContain("[video]");
     expect(captured[1]).toMatchObject({
       id: "3002",
       isFollowed: true,

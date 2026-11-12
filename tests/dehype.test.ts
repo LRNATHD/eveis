@@ -30,9 +30,12 @@ describe("calmTitle", () => {
     expect(calmTitle(techLoud)).toBe("How NASA and MIT built an FPGA AI chip with USB-C");
   });
 
-  it("never alters case-sensitive URLs or @handles inside shouting text", () => {
+  it("never alters case-sensitive URLs, @handles, or SNAKE_CASE identifiers inside shouting text", () => {
     expect(calmTitle("WATCH THIS NOW!! @MakerLab https://t.co/AbCdEf99")).toBe(
       "Watch this now! @MakerLab https://t.co/AbCdEf99",
+    );
+    expect(calmTitle("Why O_RDONLY and O_NONBLOCK matter in POSIX")).toBe(
+      "Why O_RDONLY and O_NONBLOCK matter in POSIX",
     );
   });
 });

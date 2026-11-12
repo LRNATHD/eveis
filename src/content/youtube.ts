@@ -1,16 +1,24 @@
-import { isYouTubeSafeRoute } from "../adapters/youtube-json.js";
 import { isVagueClickbaitTitle } from "../core/dearrow.js";
-import { calmTitle, midFrameThumbUrl } from "../core/dehype.js";
-import type { FeedItem, SieveConfig } from "../types.js";
-import { applyHtmlFlags, bootSiteAdapter, createDwellTracker } from "./shared.js";
+import { calmTitle, isYouTubeSafeRoute, midFrameThumbUrl } from "../core/dehype.js";
+import { isRecord, type FeedItem, type SieveConfig } from "../types.js";
+import {
+  applyHtmlFlags,
+  bootSiteAdapter,
+  createDwellTracker,
+  createRafScheduler,
+  evaluateDomBatch,
+  installMidFrameThumbFallback,
+  rememberBounded,
+} from "./shared.js";
 
 const AI_BUTTON_RE = /\bgemini\b|\bask\s+youtube\b|\bsearch\s+with\s+ai\b|\bask\s+ai\b|^ask$/i;
 
 let activeConfig: SieveConfig | null = null;
-let rafPending = false;
 const evaluatedDomVideos = new Set<string>();
 const dearrowCheckedVideos = new Set<string>();
 const trackWatchTitleDwell = createDwellTracker((el) => el.textContent ?? "", 2500);
+
+installMidFrameThumbFallback();
 
 async function resolveVagueDomTitles(): Promise<void> {
   if (!activeConfig?.enabled || !activeConfig.youtube.enabled || !activeConfig.youtube.dearrowTitles) {
@@ -37,14 +45,9 @@ async function resolveVagueDomTitles(): Promise<void> {
         "#video-title, .yt-lockup-metadata-view-model__title",
       );
       const raw = titleEl?.textContent?.trim() ?? "";
-      if (!titleEl || !raw) return;
+      if (!titleEl || !raw || !rememberBounded(dearrowCheckedVideos, vid)) return;
+      if (!isVagueClickbaitTitle(raw)) return;
 
-      if (!isVagueClickbaitTitle(raw)) {
-        dearrowCheckedVideos.add(vid);
-        return;
-      }
-
-      dearrowCheckedVideos.add(vid);
       const list = titleElsByVid.get(vid) ?? [];
       list.push(titleEl);
       titleElsByVid.set(vid, list);
@@ -53,14 +56,15 @@ async function resolveVagueDomTitles(): Promise<void> {
   if (titleElsByVid.size === 0) return;
 
   try {
-    const res = (await browser.runtime.sendMessage({
+    const res: unknown = await browser.runtime.sendMessage({
       type: "RESOLVE_DEARROW_TITLES",
       videoIds: [...titleElsByVid.keys()].slice(0, 16),
-    })) as { titles?: Record<string, string> };
+    });
+    if (!isRecord(res) || !isRecord(res.titles)) return;
 
-    for (const [vid, curated] of Object.entries(res.titles ?? {})) {
+    for (const [vid, curated] of Object.entries(res.titles)) {
       const targets = titleElsByVid.get(vid);
-      if (!targets || !curated) continue;
+      if (!targets || typeof curated !== "string" || !curated) continue;
       const finalTitle = activeConfig?.youtube.calmTitles ? calmTitle(curated) : curated;
       for (const el of targets) {
         el.textContent = finalTitle;
@@ -68,31 +72,19 @@ async function resolveVagueDomTitles(): Promise<void> {
       }
     }
   } catch {
-    // Fail open silently if mirror or background is unavailable.
+    // Mirror or background unavailability leaves original titles intact.
   }
 }
 
 function enforceRouteGuards(): void {
-  if (!activeConfig?.enabled || !activeConfig.youtube.enabled) return;
-  if (!activeConfig.youtube.hideShorts) return;
+  if (!activeConfig?.enabled || !activeConfig.youtube.enabled || !activeConfig.youtube.hideShorts) {
+    return;
+  }
   const path = window.location.pathname;
   if (path.startsWith("/shorts/") || path === "/shorts" || path.startsWith("/playables")) {
     window.location.replace("https://www.youtube.com/");
   }
 }
-
-document.addEventListener(
-  "error",
-  (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLImageElement)) return;
-    if (target.src.includes("/hq2.jpg") && !target.dataset.sieveFallback) {
-      target.dataset.sieveFallback = "1";
-      target.src = target.src.replace("/hq2.jpg", "/hqdefault.jpg");
-    }
-  },
-  true,
-);
 
 function hideGeminiAndAskButtons(): void {
   document
@@ -136,12 +128,11 @@ async function evaluateUnfilteredDomCards(): Promise<void> {
       return;
     }
     if (!vid || evaluatedDomVideos.has(vid)) return;
-
     const titleEl = card.querySelector<HTMLElement>(
       "#video-title, .yt-lockup-metadata-view-model__title, h3",
     );
     const title = titleEl?.textContent?.trim() ?? "";
-    if (!title) return;
+    if (!title || !rememberBounded(evaluatedDomVideos, vid)) return;
 
     const chanLink = card.querySelector<HTMLAnchorElement>('a[href^="/@"], a[href^="/channel/"]');
     const href = chanLink?.getAttribute("href") ?? "";
@@ -150,7 +141,6 @@ async function evaluateUnfilteredDomCards(): Promise<void> {
       : chanLink?.textContent?.trim() || undefined;
     const chanId = href.startsWith("/channel/") ? href.split("/")[2] : undefined;
 
-    evaluatedDomVideos.add(vid);
     cardById.set(vid, card);
     batch.push({
       platform: "youtube",
@@ -162,61 +152,42 @@ async function evaluateUnfilteredDomCards(): Promise<void> {
     });
   });
 
-  if (batch.length === 0) return;
+  await evaluateDomBatch(batch, (id) => {
+    const card = cardById.get(id);
+    if (card) card.dataset.sieveYtDropped = "1";
+  });
+}
 
-  try {
-    const res = (await browser.runtime.sendMessage({
-      type: "EVALUATE_SSR_ITEMS",
-      items: batch,
-    })) as { dropped?: string[] };
-    for (const id of res.dropped ?? []) {
-      const card = cardById.get(id);
-      if (card) card.dataset.sieveYtDropped = "1";
-    }
-  } catch {
-    // Fail open when background reloads.
-  }
+function isVisibleWatchTheater(): boolean {
+  if (window.location.pathname !== "/watch") return false;
+  if (document.fullscreenElement) return true;
+  const watchFlexy = document.querySelector<HTMLElement>("ytd-watch-flexy");
+  if (!watchFlexy || watchFlexy.hasAttribute("hidden")) return false;
+  if (getComputedStyle(watchFlexy).display === "none") return false;
+  return (
+    watchFlexy.hasAttribute("theater") ||
+    watchFlexy.hasAttribute("full-bleed-player") ||
+    watchFlexy.hasAttribute("fullscreen")
+  );
 }
 
 function syncTheaterHeaderTheme(): void {
   const root = document.documentElement;
   if (!root) return;
-  if (!activeConfig?.enabled || !activeConfig.youtube.enabled) {
-    delete root.dataset.sieveYtTheater;
-    return;
-  }
 
-  const watchFlexy = document.querySelector<HTMLElement>("ytd-watch-flexy");
-  const isWatchRoute = window.location.pathname === "/watch";
-  const inLandscapeTheater =
-    isWatchRoute &&
-    Boolean(watchFlexy) &&
-    !watchFlexy!.hasAttribute("hidden") &&
-    (watchFlexy!.hasAttribute("theater") ||
-      watchFlexy!.hasAttribute("full-bleed-player") ||
-      watchFlexy!.hasAttribute("fullscreen"));
-
-  const masthead = document.querySelector<HTMLElement>("ytd-masthead");
-  if (inLandscapeTheater) {
+  const headerActive = Boolean(
+    activeConfig?.enabled && activeConfig.youtube.enabled && activeConfig.youtube.cleanHeader,
+  );
+  if (headerActive && isVisibleWatchTheater()) {
     root.dataset.sieveYtTheater = "1";
-    if (masthead && !masthead.hasAttribute("dark")) {
-      masthead.setAttribute("dark", "");
-      masthead.dataset.sieveForcedDark = "1";
-    }
   } else {
     delete root.dataset.sieveYtTheater;
-    if (masthead?.dataset.sieveForcedDark === "1" && !root.hasAttribute("dark")) {
-      masthead.removeAttribute("dark");
-      delete masthead.dataset.sieveForcedDark;
-    }
   }
 }
 
 function polishRenderedCards(): void {
-  rafPending = false;
-  if (!activeConfig?.enabled || !activeConfig.youtube.enabled) return;
-
   syncTheaterHeaderTheme();
+  if (!activeConfig?.enabled || !activeConfig.youtube.enabled) return;
 
   if (activeConfig.youtube.midFrameThumbs) {
     document
@@ -254,31 +225,47 @@ function polishRenderedCards(): void {
   void evaluateUnfilteredDomCards();
 }
 
-function schedulePolish(): void {
-  if (rafPending) return;
-  rafPending = true;
-  requestAnimationFrame(polishRenderedCards);
+const schedulePolish = createRafScheduler(polishRenderedCards);
+
+function handleNavigationChange(): void {
+  syncTheaterHeaderTheme();
+  enforceRouteGuards();
+  schedulePolish();
 }
 
 bootSiteAdapter((cfg) => {
   activeConfig = cfg;
   const ytOn = cfg.enabled && cfg.youtube.enabled;
   applyHtmlFlags({
+    sieveYtOn: ytOn ? "1" : "0",
     sieveYtShorts: ytOn && cfg.youtube.hideShorts ? "1" : "0",
     sieveYtHeader: ytOn && cfg.youtube.cleanHeader ? "1" : "0",
   });
-  enforceRouteGuards();
-  schedulePolish();
+  handleNavigationChange();
 });
 
-window.addEventListener("yt-navigate-finish", () => {
-  enforceRouteGuards();
-  schedulePolish();
+window.addEventListener("yt-navigate-start", (event) => {
+  const detail = event instanceof CustomEvent && isRecord(event.detail) ? event.detail : null;
+  if (typeof detail?.url === "string") {
+    try {
+      if (new URL(detail.url, window.location.origin).pathname !== "/watch") {
+        delete document.documentElement?.dataset.sieveYtTheater;
+        return;
+      }
+    } catch {
+      // Ignore malformed navigation detail URLs.
+    }
+  }
+  syncTheaterHeaderTheme();
 });
-window.addEventListener("popstate", enforceRouteGuards);
+window.addEventListener("yt-page-data-updated", syncTheaterHeaderTheme);
+window.addEventListener("yt-navigate-finish", handleNavigationChange);
+window.addEventListener("popstate", handleNavigationChange);
+document.addEventListener("fullscreenchange", syncTheaterHeaderTheme);
 
 const observer = new MutationObserver(() => {
   if (activeConfig?.enabled && activeConfig.youtube.enabled) {
+    syncTheaterHeaderTheme();
     schedulePolish();
   }
 });
@@ -288,6 +275,6 @@ if (document.documentElement) {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["theater", "full-bleed-player", "fullscreen", "hidden"],
+    attributeFilter: ["theater", "full-bleed-player", "fullscreen", "hidden", "style"],
   });
 }

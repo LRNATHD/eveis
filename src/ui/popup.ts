@@ -1,5 +1,5 @@
 import { DEFAULT_CONFIG, mergeConfig } from "../defaults.js";
-import type { Platform, SieveConfig } from "../types.js";
+import { isRecord, type Platform, type SieveConfig } from "../types.js";
 
 interface SwitchSpec {
   label: string;
@@ -271,18 +271,49 @@ function renderSwitchRow(
   return row;
 }
 
+function renderCard(
+  titleText: string,
+  isOff: boolean,
+  switches: SwitchSpec[],
+  config: SieveConfig,
+  save: () => Promise<void>,
+  headerAction?: HTMLElement,
+): HTMLElement {
+  const card = document.createElement("section");
+  card.className = `card${isOff ? " is-off" : ""}`;
+
+  const head = document.createElement("div");
+  head.className = "card-head";
+  const title = document.createElement("span");
+  title.className = "card-title";
+  title.textContent = titleText;
+  head.appendChild(title);
+  if (headerAction) head.appendChild(headerAction);
+  card.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "card-body";
+  for (const sw of switches) {
+    body.appendChild(renderSwitchRow(sw, config, save));
+  }
+  card.appendChild(body);
+  return card;
+}
+
 async function initPopup(): Promise<void> {
   const stored = await browser.storage.local.get("sieveConfig");
-  const config = mergeConfig(stored.sieveConfig as Partial<SieveConfig> | undefined);
+  const config = mergeConfig(stored.sieveConfig);
 
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   const detected = detectPlatformFromUrl(tabs[0]?.url);
 
   const siteLabel = document.getElementById("active-site");
-  const masterInput = document.getElementById("master-enabled") as HTMLInputElement | null;
+  const rawMaster = document.getElementById("master-enabled");
+  const masterInput = rawMaster instanceof HTMLInputElement ? rawMaster : null;
   const primaryMount = document.getElementById("primary-mount");
   const secondaryMount = document.getElementById("secondary-mount");
-  const detailsEl = document.getElementById("other-platforms") as HTMLDetailsElement | null;
+  const rawDetails = document.getElementById("other-platforms");
+  const detailsEl = rawDetails instanceof HTMLDetailsElement ? rawDetails : null;
   const indicatorEl = document.getElementById("other-indicator");
 
   if (siteLabel) {
@@ -311,53 +342,17 @@ async function initPopup(): Promise<void> {
   }
 
   function renderUniversalAndSitesGeneralView(mount: HTMLElement): void {
-    const sitesCard = document.createElement("section");
-    sitesCard.className = `card${!config.enabled ? " is-off" : ""}`;
-
-    const sitesHead = document.createElement("div");
-    sitesHead.className = "card-head";
-    const sitesTitle = document.createElement("span");
-    sitesTitle.className = "card-title";
-    sitesTitle.textContent = "active platforms";
-    sitesHead.appendChild(sitesTitle);
-    sitesCard.appendChild(sitesHead);
-
-    const sitesBody = document.createElement("div");
-    sitesBody.className = "card-body";
-    for (const p of PLATFORM_CARDS) {
-      sitesBody.appendChild(
-        renderSwitchRow(
-          {
-            label: p.title,
-            get: p.enabledGet,
-            set: p.enabledSet,
-          },
-          config,
-          saveAndRerender,
-        ),
-      );
-    }
-    sitesCard.appendChild(sitesBody);
-    mount.appendChild(sitesCard);
-
-    const uniCard = document.createElement("section");
-    uniCard.className = `card${!config.enabled ? " is-off" : ""}`;
-
-    const uniHead = document.createElement("div");
-    uniHead.className = "card-head";
-    const uniTitle = document.createElement("span");
-    uniTitle.className = "card-title";
-    uniTitle.textContent = "universal";
-    uniHead.appendChild(uniTitle);
-    uniCard.appendChild(uniHead);
-
-    const uniBody = document.createElement("div");
-    uniBody.className = "card-body";
-    for (const sw of UNIVERSAL_SWITCHES) {
-      uniBody.appendChild(renderSwitchRow(sw, config, saveAndRerender));
-    }
-    uniCard.appendChild(uniBody);
-    mount.appendChild(uniCard);
+    const platformSwitches: SwitchSpec[] = PLATFORM_CARDS.map((p) => ({
+      label: p.title,
+      get: p.enabledGet,
+      set: p.enabledSet,
+    }));
+    mount.appendChild(
+      renderCard("active platforms", !config.enabled, platformSwitches, config, saveAndRerender),
+    );
+    mount.appendChild(
+      renderCard("universal", !config.enabled, UNIVERSAL_SWITCHES, config, saveAndRerender),
+    );
   }
 
   function renderActivePlatformView(
@@ -365,30 +360,20 @@ async function initPopup(): Promise<void> {
     mount: HTMLElement,
     otherMount: HTMLElement,
   ): void {
-    const card = document.createElement("section");
-    card.className = `card${!config.enabled || !primarySpec.enabledGet(config) ? " is-off" : ""}`;
-
-    const head = document.createElement("div");
-    head.className = "card-head";
-    const title = document.createElement("span");
-    title.className = "card-title";
-    title.textContent = primarySpec.title;
     const siteSwitch = makeSwitchInput(primarySpec.enabledGet(config), (val) => {
       primarySpec.enabledSet(config, val);
       void saveAndRerender();
     });
-    head.appendChild(title);
-    head.appendChild(siteSwitch);
-
-    const body = document.createElement("div");
-    body.className = "card-body";
-    for (const sw of primarySpec.switches) {
-      body.appendChild(renderSwitchRow(sw, config, saveAndRerender));
-    }
-
-    card.appendChild(head);
-    card.appendChild(body);
-    mount.appendChild(card);
+    mount.appendChild(
+      renderCard(
+        primarySpec.title,
+        !config.enabled || !primarySpec.enabledGet(config),
+        primarySpec.switches,
+        config,
+        saveAndRerender,
+        siteSwitch,
+      ),
+    );
 
     const uniGroup = document.createElement("div");
     uniGroup.className = "sub-group";
@@ -451,10 +436,10 @@ async function initPopup(): Promise<void> {
   renderAll();
 
   try {
-    const status = (await browser.runtime.sendMessage({ type: "GET_STATUS" })) as {
-      sessionFilteredCount?: number;
-    };
-    cachedCount = status.sessionFilteredCount ?? 0;
+    const status: unknown = await browser.runtime.sendMessage({ type: "GET_STATUS" });
+    if (isRecord(status) && typeof status.sessionFilteredCount === "number") {
+      cachedCount = status.sessionFilteredCount;
+    }
     updateStatusMode();
   } catch {
     if (statusLine) statusLine.textContent = DEFAULT_CONFIG.grader.mode;
@@ -467,8 +452,11 @@ async function initPopup(): Promise<void> {
 }
 
 if (typeof browser !== "undefined" && browser.storage) {
+  void initOptionsThemeGuard();
   void initPopup();
+}
 
+function initOptionsThemeGuard(): void {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     document.documentElement.classList.add("theme-switching");
     void document.documentElement.offsetHeight;

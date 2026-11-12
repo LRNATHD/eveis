@@ -92,13 +92,24 @@ describe("manifest, seeds, UI polish, and copy hygiene", () => {
 
   it("covers YouTube, Twitter, Instagram, and TikTok zero-bloat UI rules", () => {
     const ytCss = readFileSync(path.join(root, "extension/styles/youtube.css"), "utf8");
+    const ytContent = readFileSync(path.join(root, "src/content/youtube.ts"), "utf8");
     expect(ytCss).toContain("voice-search-button");
     expect(ytCss).toContain("ytd-feed-filter-chip-bar-renderer");
     expect(ytCss).toContain("#frosted-glass");
-    expect(ytCss).toContain("full-bleed-player");
     expect(ytCss).toContain("data-sieve-yt-theater");
+    expect(ytCss).not.toContain(":has(ytd-watch-flexy");
+    expect(ytCss).not.toContain("ytd-masthead:is([dark]");
     expect(ytCss).toContain("Gemini");
+    expect(ytCss).not.toContain('html[data-sieve-yt-header="1"] [title*="Gemini" i]');
+    expect(ytCss).not.toContain('html[data-sieve-yt-header="1"] [aria-label*="Gemini" i]');
+    expect(ytCss).toContain('html[data-sieve-yt-on="1"] ytd-rich-grid-row');
     expect(ytCss).not.toContain("order: -1");
+    expect(ytContent).toContain("full-bleed-player");
+    expect(ytContent).toContain("yt-navigate-start");
+    expect(ytContent).not.toContain('setAttribute("dark"');
+
+    const iconSvg = readFileSync(path.join(root, "extension/icons/icon.svg"), "utf8");
+    expect(iconSvg).not.toContain("context-fill #");
 
     const xCss = readFileSync(path.join(root, "extension/styles/twitter.css"), "utf8");
     expect(xCss).toContain('[href^="/i/premium"]');

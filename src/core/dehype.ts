@@ -154,6 +154,15 @@ export function normalizeHandle(raw?: string | null): string {
   return raw.trim().replace(/^@+/, "").toLowerCase();
 }
 
+export function isYouTubeSafeRoute(pageUrl: string): boolean {
+  try {
+    const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
+    return pathname !== "/" && pathname !== "/watch" && pathname !== "/results";
+  } catch {
+    return false;
+  }
+}
+
 function stripPunct(token: string): { lead: string; core: string; trail: string } {
   const match = /^([^A-Za-z0-9]*)([A-Za-z0-9][A-Za-z0-9'-]*[A-Za-z0-9]|[A-Za-z0-9])([^A-Za-z0-9]*)$/.exec(
     token,
@@ -177,7 +186,7 @@ function capitalizeWord(word: string): string {
 }
 
 function isUrlOrHandle(part: string): boolean {
-  return /^(?:https?:\/\/|www\.|@)/i.test(part.trim());
+  return /^(?:https?:\/\/|www\.|@)/i.test(part.trim()) || part.includes("_");
 }
 
 export function calmTitle(title: string): string {

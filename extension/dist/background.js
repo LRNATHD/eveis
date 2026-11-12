@@ -154,6 +154,14 @@
     if (!raw || typeof raw !== "string") return "";
     return raw.trim().replace(/^@+/, "").toLowerCase();
   }
+  function isYouTubeSafeRoute(pageUrl) {
+    try {
+      const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
+      return pathname !== "/" && pathname !== "/watch" && pathname !== "/results";
+    } catch {
+      return false;
+    }
+  }
   function stripPunct(token) {
     const match = /^([^A-Za-z0-9]*)([A-Za-z0-9][A-Za-z0-9'-]*[A-Za-z0-9]|[A-Za-z0-9])([^A-Za-z0-9]*)$/.exec(
       token
@@ -173,7 +181,7 @@
     return word.replace(/[A-Za-z]/, (ch) => ch.toUpperCase());
   }
   function isUrlOrHandle(part) {
-    return /^(?:https?:\/\/|www\.|@)/i.test(part.trim());
+    return /^(?:https?:\/\/|www\.|@)/i.test(part.trim()) || part.includes("_");
   }
   function calmTitle(title) {
     if (!title) return title;
@@ -245,10 +253,12 @@
     return `https://i.ytimg.com/vi/${resolvedId}/hq2.jpg`;
   }
 
-  // src/adapters/instagram-json.ts
+  // src/types.ts
   function isRecord(v) {
     return typeof v === "object" && v !== null && !Array.isArray(v);
   }
+
+  // src/adapters/instagram-json.ts
   function isMediaAd(media, wrapper) {
     if (media.ad_id || media.is_ad === true || media.is_organic_product_tagging_eligible === false && media.ad_action) {
       return true;
@@ -288,7 +298,6 @@
     const durationSec = typeof media.video_duration === "number" ? media.video_duration : void 0;
     const likes = typeof media.like_count === "number" ? media.like_count : void 0;
     const replies = typeof media.comment_count === "number" ? media.comment_count : void 0;
-    const views = typeof media.play_count === "number" ? media.play_count : void 0;
     return {
       platform: "instagram",
       id,
@@ -299,7 +308,7 @@
       titleOrText: captionText || `@${creatorHandle ?? "reel"}`,
       secondaryText,
       durationSec,
-      metrics: { likes, replies, views }
+      metrics: { likes, replies }
     };
   }
   function isInstagramProfileOrPermalink(pageUrl) {
@@ -347,7 +356,6 @@
         candidates.set(item.id, item);
         slots.push({
           list: edges,
-          id: item.id,
           getMediaId: (el) => {
             const m = getMediaFromEdge(el);
             const raw = m?.pk ?? m?.id ?? m?.code;
@@ -379,7 +387,6 @@
           candidates.set(item.id, item);
           slots.push({
             list: items,
-            id: item.id,
             getMediaId: (el) => {
               const m = isRecord(el) && isRecord(el.media) ? el.media : isRecord(el) ? el : null;
               const raw = m?.pk ?? m?.id ?? m?.code;
@@ -410,7 +417,6 @@
           candidates.set(item.id, item);
           slots.push({
             list: feedItems,
-            id: item.id,
             getMediaId: (el) => {
               const m = isRecord(el) && isRecord(el.media_or_ad) ? el.media_or_ad : null;
               const raw = m?.pk ?? m?.id ?? m?.code;
@@ -438,11 +444,9 @@
   }
 
   // src/adapters/stream-decode.ts
-  function decodeUtf8Chunks(chunks) {
-    if (chunks.length === 0) return "";
-    if (chunks.length === 1) {
-      return new TextDecoder("utf-8", { fatal: false }).decode(chunks[0]);
-    }
+  function concatByteChunks(chunks) {
+    if (chunks.length === 0) return new Uint8Array(0);
+    if (chunks.length === 1) return chunks[0];
     let total = 0;
     for (const chunk of chunks) total += chunk.byteLength;
     const merged = new Uint8Array(total);
@@ -451,13 +455,14 @@
       merged.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return new TextDecoder("utf-8", { fatal: false }).decode(merged);
+    return merged;
+  }
+  function decodeUtf8Chunks(chunks) {
+    if (chunks.length === 0) return "";
+    return new TextDecoder("utf-8", { fatal: false }).decode(concatByteChunks(chunks));
   }
 
   // src/adapters/tiktok-json.ts
-  function isRecord2(v) {
-    return typeof v === "object" && v !== null && !Array.isArray(v);
-  }
   function rewriteTikTokThemeCookieHeader(cookieHeader) {
     const parts = cookieHeader.split(";").map((p) => p.trim()).filter(Boolean);
     let sawTheme = false;
@@ -491,7 +496,7 @@
   }
   async function filterTikTokJson(data, config2, decide, urlPath = "", pageUrl = "") {
     if (!config2.enabled || !config2.tiktok.enabled) return data;
-    if (!isRecord2(data) || !Array.isArray(data.itemList)) return data;
+    if (!isRecord(data) || !Array.isArray(data.itemList)) return data;
     const isProfileSurface = isTikTokProfileOrDirectRoute(urlPath, pageUrl);
     if (config2.tiktok.postOnlyMode && !isProfileSurface) {
       data.itemList = [];
@@ -501,8 +506,8 @@
     const candidates = /* @__PURE__ */ new Map();
     for (let i = 0; i < list.length; i++) {
       const raw = list[i];
-      if (!isRecord2(raw)) continue;
-      if (raw.isAd === true || isRecord2(raw.adInfo)) {
+      if (!isRecord(raw)) continue;
+      if (raw.isAd === true || isRecord(raw.adInfo)) {
         list.splice(i, 1);
         i--;
         continue;
@@ -514,9 +519,9 @@
       if (!config2.tiktok.caliberFilter || isProfileSurface) continue;
       const id = typeof raw.id === "string" ? raw.id : "";
       if (!id) continue;
-      const author = isRecord2(raw.author) ? raw.author : {};
-      const stats = isRecord2(raw.stats) ? raw.stats : {};
-      const video = isRecord2(raw.video) ? raw.video : {};
+      const author = isRecord(raw.author) ? raw.author : {};
+      const stats = isRecord(raw.stats) ? raw.stats : {};
+      const video = isRecord(raw.video) ? raw.video : {};
       const followStatus = typeof author.followStatus === "number" ? author.followStatus : 0;
       candidates.set(id, {
         platform: "tiktok",
@@ -529,74 +534,185 @@
         durationSec: typeof video.duration === "number" ? video.duration : void 0,
         metrics: {
           likes: typeof stats.diggCount === "number" ? stats.diggCount : void 0,
-          replies: typeof stats.commentCount === "number" ? stats.commentCount : void 0,
-          views: typeof stats.playCount === "number" ? stats.playCount : void 0
+          replies: typeof stats.commentCount === "number" ? stats.commentCount : void 0
         }
       });
     }
-    if (candidates.size === 0 || !config2.tiktok.caliberFilter || isProfileSurface) return data;
+    if (candidates.size === 0) return data;
     const droppedIds = await decide([...candidates.values()]);
     if (droppedIds.size === 0) return data;
     for (let i = list.length - 1; i >= 0; i--) {
       const entry = list[i];
-      if (isRecord2(entry) && typeof entry.id === "string" && droppedIds.has(entry.id)) {
+      if (isRecord(entry) && typeof entry.id === "string" && droppedIds.has(entry.id)) {
         list.splice(i, 1);
       }
     }
     return data;
   }
 
+  // src/defaults.ts
+  var SCHEMA_VERSION = 1;
+  var DEFAULT_RUBRIC = `Evaluate each item across four axes:
+1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
+2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
+3. Substance: real signal, art, humor, or insight vs padded filler or recycled sludge.
+4. Freshness: timely updates, strange rabbit holes, or original work vs rehashed outrage.
+
+Keep items that show genuine human craft, curiosity, engineering, hardware, software, science, design, art, cinematography, music, timely primary news, or earnest humor, even from tiny unknown creators.
+
+Drop items that fail Authenticity or Substance: ragebait, political or culture-war fights, cynical dunking, celebrity or reality-TV gossip, episodic short-drama cliffhangers, AI-generated narration or visual slop, engagement hooks ("wait till the end", "feel illegal to know", "comment X for link", siren-emoji fake breaking hype), hustle or crypto grifts, and manufactured anxiety. When uncertain, keep.`;
+  var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
+  var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
+  var DEFAULT_CONFIG = {
+    schemaVersion: SCHEMA_VERSION,
+    enabled: true,
+    passFollowed: true,
+    noveltyFilter: true,
+    youtube: {
+      enabled: true,
+      caliberFilter: true,
+      hideShorts: true,
+      cleanHeader: true,
+      midFrameThumbs: true,
+      calmTitles: true,
+      dearrowTitles: true
+    },
+    x: {
+      enabled: true,
+      caliberFilter: true,
+      slopCadenceFilter: true,
+      classicBird: true,
+      cleanSidebar: true,
+      cleanNav: true,
+      restoreHeadlines: true
+    },
+    instagram: {
+      enabled: true,
+      caliberFilter: true,
+      filterReels: true,
+      hideClutter: true
+    },
+    tiktok: {
+      enabled: true,
+      caliberFilter: true,
+      cleanChrome: true,
+      lightMode: true,
+      postOnlyMode: false
+    },
+    grader: {
+      mode: "local",
+      endpoint: LOCAL_DEFAULT_ENDPOINT,
+      model: LOCAL_DEFAULT_MODEL,
+      apiKey: "",
+      rubric: DEFAULT_RUBRIC,
+      streamHoldMs: 1500
+    },
+    allowHandles: [],
+    blockHandles: []
+  };
+  function readStringList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => typeof item === "string");
+  }
+  function bool(obj, key, fallback) {
+    return typeof obj[key] === "boolean" ? obj[key] : fallback;
+  }
+  function mergeConfig(stored) {
+    if (!isRecord(stored)) return structuredClone(DEFAULT_CONFIG);
+    const yt = isRecord(stored.youtube) ? stored.youtube : {};
+    const x = isRecord(stored.x) ? stored.x : {};
+    const ig = isRecord(stored.instagram) ? stored.instagram : {};
+    const tt = isRecord(stored.tiktok) ? stored.tiktok : {};
+    const gr = isRecord(stored.grader) ? stored.grader : {};
+    const d = DEFAULT_CONFIG;
+    const mode = gr.mode === "off" || gr.mode === "local" || gr.mode === "api" ? gr.mode : d.grader.mode;
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      enabled: bool(stored, "enabled", d.enabled),
+      passFollowed: bool(stored, "passFollowed", d.passFollowed),
+      noveltyFilter: bool(stored, "noveltyFilter", d.noveltyFilter),
+      youtube: {
+        enabled: bool(yt, "enabled", d.youtube.enabled),
+        caliberFilter: bool(yt, "caliberFilter", d.youtube.caliberFilter),
+        hideShorts: bool(yt, "hideShorts", d.youtube.hideShorts),
+        cleanHeader: bool(yt, "cleanHeader", d.youtube.cleanHeader),
+        midFrameThumbs: bool(yt, "midFrameThumbs", d.youtube.midFrameThumbs),
+        calmTitles: bool(yt, "calmTitles", d.youtube.calmTitles),
+        dearrowTitles: bool(yt, "dearrowTitles", d.youtube.dearrowTitles)
+      },
+      x: {
+        enabled: bool(x, "enabled", d.x.enabled),
+        caliberFilter: bool(x, "caliberFilter", d.x.caliberFilter),
+        slopCadenceFilter: bool(x, "slopCadenceFilter", d.x.slopCadenceFilter),
+        classicBird: bool(x, "classicBird", d.x.classicBird),
+        cleanSidebar: bool(x, "cleanSidebar", d.x.cleanSidebar),
+        cleanNav: bool(x, "cleanNav", d.x.cleanNav),
+        restoreHeadlines: bool(x, "restoreHeadlines", d.x.restoreHeadlines)
+      },
+      instagram: {
+        enabled: bool(ig, "enabled", d.instagram.enabled),
+        caliberFilter: bool(ig, "caliberFilter", d.instagram.caliberFilter),
+        filterReels: bool(ig, "filterReels", d.instagram.filterReels),
+        hideClutter: bool(ig, "hideClutter", d.instagram.hideClutter)
+      },
+      tiktok: {
+        enabled: bool(tt, "enabled", d.tiktok.enabled),
+        caliberFilter: bool(tt, "caliberFilter", d.tiktok.caliberFilter),
+        cleanChrome: bool(tt, "cleanChrome", d.tiktok.cleanChrome),
+        lightMode: bool(tt, "lightMode", d.tiktok.lightMode),
+        postOnlyMode: bool(tt, "postOnlyMode", d.tiktok.postOnlyMode)
+      },
+      grader: {
+        mode,
+        endpoint: typeof gr.endpoint === "string" ? gr.endpoint : d.grader.endpoint,
+        model: typeof gr.model === "string" ? gr.model : d.grader.model,
+        apiKey: typeof gr.apiKey === "string" ? gr.apiKey : d.grader.apiKey,
+        rubric: typeof gr.rubric === "string" ? gr.rubric : d.grader.rubric,
+        streamHoldMs: typeof gr.streamHoldMs === "number" && Number.isFinite(gr.streamHoldMs) ? gr.streamHoldMs : d.grader.streamHoldMs
+      },
+      allowHandles: readStringList(stored.allowHandles),
+      blockHandles: readStringList(stored.blockHandles)
+    };
+  }
+
   // src/core/llm.ts
   var MAX_BATCH_SIZE = 20;
   var BACKGROUND_TIMEOUT_MS = 6e3;
-  function parseDropResponse(raw, validIds) {
-    const dropped = /* @__PURE__ */ new Set();
-    if (!raw || typeof raw !== "string") return dropped;
+  function extractJsonObject(raw) {
+    if (!raw) return null;
     const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw);
     const candidate = (fenced?.[1] ?? raw).trim();
     const braceStart = candidate.indexOf("{");
     const braceEnd = candidate.lastIndexOf("}");
-    if (braceStart === -1 || braceEnd <= braceStart) return dropped;
+    if (braceStart === -1 || braceEnd <= braceStart) return null;
     try {
       const parsed = JSON.parse(candidate.slice(braceStart, braceEnd + 1));
-      if (Array.isArray(parsed.drop)) {
-        for (const id of parsed.drop) {
-          if (typeof id === "string" && validIds.has(id)) {
-            dropped.add(id);
-          }
-        }
-      }
+      return isRecord(parsed) ? parsed : null;
     } catch {
-      return dropped;
+      return null;
     }
-    return dropped;
   }
   function parseIndexedVerdicts(raw, orderedIds) {
+    const dropped = /* @__PURE__ */ new Set();
+    const parsed = extractJsonObject(raw);
+    if (!parsed) return dropped;
     const validSet = new Set(orderedIds);
-    const dropped = parseDropResponse(raw, validSet);
-    if (dropped.size > 0) return dropped;
-    if (!raw || typeof raw !== "string") return dropped;
-    const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw);
-    const candidate = (fenced?.[1] ?? raw).trim();
-    const braceStart = candidate.indexOf("{");
-    const braceEnd = candidate.lastIndexOf("}");
-    if (braceStart === -1 || braceEnd <= braceStart) return dropped;
-    try {
-      const parsed = JSON.parse(candidate.slice(braceStart, braceEnd + 1));
-      for (const [key, val] of Object.entries(parsed)) {
-        if (typeof val !== "string") continue;
-        const v = val.trim().toLowerCase();
-        if (v !== "d" && v !== "drop") continue;
-        if (/^\d+$/.test(key)) {
-          const idx = Number.parseInt(key, 10);
-          const mappedId = orderedIds[idx];
-          if (mappedId) dropped.add(mappedId);
-        } else if (validSet.has(key)) {
-          dropped.add(key);
-        }
+    if (Array.isArray(parsed.drop)) {
+      for (const id of parsed.drop) {
+        if (typeof id === "string" && validSet.has(id)) dropped.add(id);
       }
-    } catch {
       return dropped;
+    }
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof val !== "string") continue;
+      const v = val.trim().toLowerCase();
+      if (v !== "d" && v !== "drop") continue;
+      if (/^\d+$/.test(key)) {
+        const mappedId = orderedIds[Number.parseInt(key, 10)];
+        if (mappedId) dropped.add(mappedId);
+      } else if (validSet.has(key)) {
+        dropped.add(key);
+      }
     }
     return dropped;
   }
@@ -616,11 +732,20 @@
 - "d" = confident drop (ONLY clear ragebait, public humiliation/dunk clips, political/culture-war outrage, celebrity/influencer gossip, crypto/memecoin shills, hustle-bro/DM-funnel bait, short-drama cliffhangers, or AI voiceover sleep-slop)
 
 Return ONLY a JSON object mapping every index to "k", "u", or "d", like {"0":"k","1":"u","2":"d"}.`;
+  function readFirstChoiceContent(body) {
+    if (!isRecord(body) || !Array.isArray(body.choices)) return "";
+    const first = body.choices[0];
+    if (!isRecord(first) || !isRecord(first.message)) return "";
+    return typeof first.message.content === "string" ? first.message.content : "";
+  }
   async function gradeItemsBatch(items, config2, fetchImpl = fetch) {
-    const dropped = /* @__PURE__ */ new Set();
-    if (config2.grader.mode === "off" || items.length === 0) return dropped;
-    if (!config2.grader.endpoint || !config2.grader.model) return dropped;
-    if (config2.grader.mode === "api" && !config2.grader.apiKey.trim()) return dropped;
+    if (config2.grader.mode === "off" || items.length === 0) return /* @__PURE__ */ new Set();
+    if (!config2.grader.endpoint || !config2.grader.model) {
+      throw new Error("Missing grader endpoint or model");
+    }
+    if (config2.grader.mode === "api" && !config2.grader.apiKey.trim()) {
+      throw new Error("Missing API key");
+    }
     const batch = items.slice(0, MAX_BATCH_SIZE);
     const orderedIds = batch.map((item) => item.id);
     const controller = new AbortController();
@@ -628,7 +753,7 @@ Return ONLY a JSON object mapping every index to "k", "u", or "d", like {"0":"k"
     const headers = {
       "Content-Type": "application/json"
     };
-    if (config2.grader.mode === "api" && config2.grader.apiKey.trim()) {
+    if (config2.grader.apiKey.trim()) {
       headers.Authorization = `Bearer ${config2.grader.apiKey.trim()}`;
     }
     const isLocal = config2.grader.mode === "local";
@@ -659,12 +784,11 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
           ]
         })
       });
-      if (!res.ok) return dropped;
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       const body = await res.json();
-      const content = body.choices?.[0]?.message?.content ?? "";
-      return parseIndexedVerdicts(content, orderedIds);
-    } catch {
-      return dropped;
+      return parseIndexedVerdicts(readFirstChoiceContent(body), orderedIds);
     } finally {
       clearTimeout(timer);
     }
@@ -852,13 +976,9 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     }
     if (!item.isFollowed) {
       if (item.platform === "x" && config2.x.slopCadenceFilter) {
-        if (isStructuralSlop(item.titleOrText, { isReply: item.surface === "replies" }, 65)) {
-          return "drop";
-        }
+        if (isStructuralSlop(item.titleOrText, {}, 65)) return "drop";
       } else if (item.platform !== "youtube") {
-        if (isStructuralSlop(item.titleOrText, { isReply: false }, 74)) {
-          return "drop";
-        }
+        if (isStructuralSlop(item.titleOrText, {}, 74)) return "drop";
       }
       if (config2.noveltyFilter && novelty2?.isRedundantRehash(item.titleOrText)) {
         return "drop";
@@ -878,12 +998,6 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
         return "drop";
       }
     }
-    if (item.platform === "x" && item.surface === "replies" && item.isBlueReply && !item.isFollowed) {
-      const trimmed = item.titleOrText.trim();
-      if (trimmed.length <= 18 && !/[a-z]{4,}/i.test(trimmed)) {
-        return "drop";
-      }
-    }
     return "uncertain";
   }
   async function runSieveOnBatch(items, config2, seeds2, memory2, fetchImpl = fetch, novelty2) {
@@ -900,14 +1014,14 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     if (uncertain.length === 0 || config2.grader.mode === "off") {
       return droppedIds;
     }
-    const holdMs = Math.max(50, config2.grader.streamHoldMs || 900);
+    const holdMs = Math.max(50, config2.grader.streamHoldMs || DEFAULT_CONFIG.grader.streamHoldMs);
     const gradingPromise = gradeItemsBatch(uncertain, config2, fetchImpl).then(async (llmDrops) => {
       for (const item of uncertain) {
         const verdict = llmDrops.has(item.id) ? "drop" : "keep";
         await memory2.recordVerdict(item, verdict);
       }
       return llmDrops;
-    });
+    }).catch(() => /* @__PURE__ */ new Set());
     let timer;
     const timedOut = Symbol("timeout");
     const outcome = await Promise.race([
@@ -924,9 +1038,6 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   }
 
   // src/adapters/twitter-json.ts
-  function isRecord3(v) {
-    return typeof v === "object" && v !== null && !Array.isArray(v);
-  }
   var NOISE_ENTRY_PREFIXES = [
     "promoted-",
     "who-to-follow-",
@@ -938,44 +1049,44 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     return NOISE_ENTRY_PREFIXES.some((prefix) => entryId.startsWith(prefix));
   }
   function unwrapTweet(rawResult) {
-    if (!isRecord3(rawResult)) return null;
-    if (rawResult.__typename === "TweetWithVisibilityResults" && isRecord3(rawResult.tweet)) {
+    if (!isRecord(rawResult)) return null;
+    if (rawResult.__typename === "TweetWithVisibilityResults" && isRecord(rawResult.tweet)) {
       return rawResult.tweet;
     }
-    if (typeof rawResult.rest_id === "string" || isRecord3(rawResult.legacy)) {
+    if (typeof rawResult.rest_id === "string" || isRecord(rawResult.legacy)) {
       return rawResult;
     }
     return null;
   }
   function readTweetBody(tweet) {
-    if (isRecord3(tweet.note_tweet) && isRecord3(tweet.note_tweet.note_tweet_results) && isRecord3(tweet.note_tweet.note_tweet_results.result) && typeof tweet.note_tweet.note_tweet_results.result.text === "string") {
+    if (isRecord(tweet.note_tweet) && isRecord(tweet.note_tweet.note_tweet_results) && isRecord(tweet.note_tweet.note_tweet_results.result) && typeof tweet.note_tweet.note_tweet_results.result.text === "string") {
       return tweet.note_tweet.note_tweet_results.result.text;
     }
-    if (isRecord3(tweet.legacy) && typeof tweet.legacy.full_text === "string") {
+    if (isRecord(tweet.legacy) && typeof tweet.legacy.full_text === "string") {
       return tweet.legacy.full_text;
     }
     return "";
   }
   function extractTweetYouTubeIds(tweet) {
     const urls = [];
-    if (isRecord3(tweet.legacy)) {
+    if (isRecord(tweet.legacy)) {
       if (typeof tweet.legacy.full_text === "string") urls.push(tweet.legacy.full_text);
-      if (isRecord3(tweet.legacy.entities) && Array.isArray(tweet.legacy.entities.urls)) {
+      if (isRecord(tweet.legacy.entities) && Array.isArray(tweet.legacy.entities.urls)) {
         for (const u of tweet.legacy.entities.urls) {
-          if (isRecord3(u) && typeof u.expanded_url === "string") {
+          if (isRecord(u) && typeof u.expanded_url === "string") {
             urls.push(u.expanded_url);
           }
         }
       }
     }
-    if (isRecord3(tweet.card) && isRecord3(tweet.card.legacy) && Array.isArray(tweet.card.legacy.binding_values)) {
+    if (isRecord(tweet.card) && isRecord(tweet.card.legacy) && Array.isArray(tweet.card.legacy.binding_values)) {
       for (const b of tweet.card.legacy.binding_values) {
-        if (isRecord3(b) && isRecord3(b.value) && typeof b.value.string_value === "string") {
+        if (isRecord(b) && isRecord(b.value) && typeof b.value.string_value === "string") {
           urls.push(b.value.string_value);
         }
       }
     }
-    if (isRecord3(tweet.quoted_status_result)) {
+    if (isRecord(tweet.quoted_status_result)) {
       const quoted = unwrapTweet(tweet.quoted_status_result.result);
       if (quoted) urls.push(...extractTweetYouTubeIds(quoted));
     }
@@ -983,29 +1094,29 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   }
   function buildTweetRichContext(tweet) {
     const parts = [];
-    const legacy = isRecord3(tweet.legacy) ? tweet.legacy : {};
-    const mediaHolder = isRecord3(legacy.extended_entities) ? legacy.extended_entities : isRecord3(legacy.entities) ? legacy.entities : void 0;
+    const legacy = isRecord(tweet.legacy) ? tweet.legacy : {};
+    const mediaHolder = isRecord(legacy.extended_entities) ? legacy.extended_entities : isRecord(legacy.entities) ? legacy.entities : void 0;
     if (mediaHolder && Array.isArray(mediaHolder.media) && mediaHolder.media.length > 0) {
       const types = /* @__PURE__ */ new Set();
       for (const m of mediaHolder.media) {
-        if (isRecord3(m) && typeof m.type === "string") {
+        if (isRecord(m) && typeof m.type === "string") {
           types.add(m.type === "animated_gif" ? "gif" : m.type);
         }
       }
       if (types.size > 0) parts.push(`[${[...types].join("+")}]`);
     }
-    if (isRecord3(legacy.entities) && Array.isArray(legacy.entities.urls)) {
+    if (isRecord(legacy.entities) && Array.isArray(legacy.entities.urls)) {
       for (const u of legacy.entities.urls) {
-        if (isRecord3(u) && typeof u.expanded_url === "string") {
+        if (isRecord(u) && typeof u.expanded_url === "string") {
           parts.push(`link: ${u.expanded_url.slice(0, 90)}`);
         }
       }
     }
-    if (isRecord3(tweet.card) && isRecord3(tweet.card.legacy) && Array.isArray(tweet.card.legacy.binding_values)) {
+    if (isRecord(tweet.card) && isRecord(tweet.card.legacy) && Array.isArray(tweet.card.legacy.binding_values)) {
       let cardTitle = "";
       let cardDomain = "";
       for (const b of tweet.card.legacy.binding_values) {
-        if (!isRecord3(b) || typeof b.key !== "string" || !isRecord3(b.value)) continue;
+        if (!isRecord(b) || typeof b.key !== "string" || !isRecord(b.value)) continue;
         if (b.key === "title" && typeof b.value.string_value === "string") {
           cardTitle = b.value.string_value.trim();
         } else if (b.key === "vanity_url" && typeof b.value.string_value === "string") {
@@ -1016,12 +1127,12 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
         parts.push(`card: ${cardDomain ? `${cardDomain} - ` : ""}${cardTitle}`);
       }
     }
-    if (isRecord3(tweet.quoted_status_result)) {
+    if (isRecord(tweet.quoted_status_result)) {
       const quoted = unwrapTweet(tweet.quoted_status_result.result);
       if (quoted) {
         const qBody = readTweetBody(quoted).trim();
         let qAuthor = "";
-        if (isRecord3(quoted.core) && isRecord3(quoted.core.user_results) && isRecord3(quoted.core.user_results.result) && isRecord3(quoted.core.user_results.result.legacy) && typeof quoted.core.user_results.result.legacy.screen_name === "string") {
+        if (isRecord(quoted.core) && isRecord(quoted.core.user_results) && isRecord(quoted.core.user_results.result) && isRecord(quoted.core.user_results.result.legacy) && typeof quoted.core.user_results.result.legacy.screen_name === "string") {
           qAuthor = `@${quoted.core.user_results.result.legacy.screen_name}`;
         }
         if (qBody) {
@@ -1032,28 +1143,28 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     return parts.length > 0 ? parts.join(" | ") : void 0;
   }
   function polishTweetPresentation(tweet, config2, ytIds) {
-    if (isRecord3(tweet.legacy) && typeof tweet.legacy.full_text === "string") {
+    if (isRecord(tweet.legacy) && typeof tweet.legacy.full_text === "string") {
       tweet.legacy.full_text = calmTitle(tweet.legacy.full_text);
     }
-    if (isRecord3(tweet.note_tweet) && isRecord3(tweet.note_tweet.note_tweet_results) && isRecord3(tweet.note_tweet.note_tweet_results.result) && typeof tweet.note_tweet.note_tweet_results.result.text === "string") {
+    if (isRecord(tweet.note_tweet) && isRecord(tweet.note_tweet.note_tweet_results) && isRecord(tweet.note_tweet.note_tweet_results.result) && typeof tweet.note_tweet.note_tweet_results.result.text === "string") {
       tweet.note_tweet.note_tweet_results.result.text = calmTitle(
         tweet.note_tweet.note_tweet_results.result.text
       );
     }
-    if (isRecord3(tweet.quoted_status_result)) {
+    if (isRecord(tweet.quoted_status_result)) {
       const quoted = unwrapTweet(tweet.quoted_status_result.result);
       if (quoted) {
         polishTweetPresentation(quoted, config2, extractTweetYouTubeIds(quoted));
       }
     }
-    if (!isRecord3(tweet.card) || !isRecord3(tweet.card.legacy)) return;
+    if (!isRecord(tweet.card) || !isRecord(tweet.card.legacy)) return;
     const bindings = tweet.card.legacy.binding_values;
     if (!Array.isArray(bindings)) return;
     const fallbackYtId = ytIds[0];
     let titleVal;
     let vanityEntry;
     for (const b of bindings) {
-      if (!isRecord3(b) || typeof b.key !== "string" || !isRecord3(b.value)) continue;
+      if (!isRecord(b) || typeof b.key !== "string" || !isRecord(b.value)) continue;
       if (b.key === "title" && typeof b.value.string_value === "string") {
         const calmed = calmTitle(b.value.string_value.trim());
         b.value.string_value = calmed;
@@ -1061,7 +1172,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       } else if (b.key === "vanity_url" && typeof b.value.string_value === "string") {
         vanityEntry = b.value;
       }
-      if (isRecord3(b.value.image_value) && typeof b.value.image_value.url === "string") {
+      if (isRecord(b.value.image_value) && typeof b.value.image_value.url === "string") {
         const imgUrl = b.value.image_value.url;
         if (imgUrl.includes("ytimg.com/vi")) {
           b.value.image_value.url = midFrameThumbUrl(imgUrl, fallbackYtId);
@@ -1075,33 +1186,32 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     }
   }
   function readUserFollowFlag(userContainer) {
-    if (!isRecord3(userContainer)) return { following: false, isBlue: false };
+    if (!isRecord(userContainer)) return { following: false };
     const id = typeof userContainer.rest_id === "string" ? userContainer.rest_id : void 0;
-    const isBlue = userContainer.is_blue_verified === true;
     let handle;
     let following = false;
-    if (isRecord3(userContainer.legacy)) {
+    if (isRecord(userContainer.legacy)) {
       if (typeof userContainer.legacy.screen_name === "string") {
         handle = userContainer.legacy.screen_name;
       }
       if (userContainer.legacy.following === true) following = true;
     }
-    if (isRecord3(userContainer.relationship_perspectives) && userContainer.relationship_perspectives.following === true) {
+    if (isRecord(userContainer.relationship_perspectives) && userContainer.relationship_perspectives.following === true) {
       following = true;
     }
-    return { id, handle, following, isBlue };
+    return { id, handle, following };
   }
   function extractTweetItem(tweet, surface, ytIds, socialContextFollowing) {
     const id = typeof tweet.rest_id === "string" ? tweet.rest_id : "";
     if (!id) return null;
     const text = readTweetBody(tweet);
     if (!text) return null;
-    const legacy = isRecord3(tweet.legacy) ? tweet.legacy : {};
-    const outerAuthor = isRecord3(tweet.core) && isRecord3(tweet.core.user_results) ? readUserFollowFlag(tweet.core.user_results.result) : { following: false, isBlue: false };
+    const legacy = isRecord(tweet.legacy) ? tweet.legacy : {};
+    const outerAuthor = isRecord(tweet.core) && isRecord(tweet.core.user_results) ? readUserFollowFlag(tweet.core.user_results.result) : { following: false };
     let innerFollowed = false;
-    if (isRecord3(legacy.retweeted_status_result)) {
+    if (isRecord(legacy.retweeted_status_result)) {
       const inner = unwrapTweet(legacy.retweeted_status_result.result);
-      if (inner && isRecord3(inner.core) && isRecord3(inner.core.user_results)) {
+      if (inner && isRecord(inner.core) && isRecord(inner.core.user_results)) {
         innerFollowed = readUserFollowFlag(inner.core.user_results.result).following;
       }
     }
@@ -1116,7 +1226,6 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       creatorId: outerAuthor.id,
       creatorHandle: outerAuthor.handle,
       isFollowed,
-      isBlueReply: surface === "replies" && outerAuthor.isBlue,
       surface,
       titleOrText: text,
       ...secondaryText ? { secondaryText } : {},
@@ -1126,17 +1235,17 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   }
   async function filterTwitterJson(data, urlPath, config2, decide) {
     if (!config2.enabled || !config2.x.enabled) return data;
-    if (!isRecord3(data)) return data;
-    const isProfilePayload = isRecord3(data.data) && isRecord3(data.data.user);
+    if (!isRecord(data)) return data;
+    const isProfilePayload = isRecord(data.data) && isRecord(data.data.user);
     const isAdsOnlySurface = isProfilePayload || urlPath.includes("/HomeLatestTimeline") || urlPath.includes("/TweetDetail") || urlPath.includes("/UserTweets") || urlPath.includes("/UserMedia") || urlPath.includes("/HighlightsTweets") || urlPath.includes("/Likes");
     const surface = urlPath.includes("/SearchTimeline") ? "search" : "timeline";
     const candidates = /* @__PURE__ */ new Map();
     const entryRefs = [];
     function extractEntryId(entry) {
       const rawEntryId = typeof entry.entryId === "string" ? entry.entryId : "";
-      const content = isRecord3(entry.content) ? entry.content : isRecord3(entry.item) ? entry.item : void 0;
-      const itemContent = content && isRecord3(content.itemContent) ? content.itemContent : void 0;
-      if (itemContent && isRecord3(itemContent.tweet_results)) {
+      const content = isRecord(entry.content) ? entry.content : isRecord(entry.item) ? entry.item : void 0;
+      const itemContent = content && isRecord(content.itemContent) ? content.itemContent : void 0;
+      if (itemContent && isRecord(itemContent.tweet_results)) {
         const tweet = unwrapTweet(itemContent.tweet_results.result);
         if (tweet && typeof tweet.rest_id === "string") return tweet.rest_id;
       }
@@ -1150,7 +1259,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
         for (const child of node) walkInstructions(child);
         return;
       }
-      if (!isRecord3(node)) return;
+      if (!isRecord(node)) return;
       if (Array.isArray(node.entries)) {
         processEntriesArray(node.entries);
       }
@@ -1164,23 +1273,23 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     function processEntriesArray(entries) {
       for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        if (!isRecord3(entry)) continue;
+        if (!isRecord(entry)) continue;
         const entryId = typeof entry.entryId === "string" ? entry.entryId : "";
         if (entryId && isNoiseEntryId(entryId)) {
           entries.splice(i, 1);
           i--;
           continue;
         }
-        const content = isRecord3(entry.content) ? entry.content : isRecord3(entry.item) ? entry.item : void 0;
-        const itemContent = content && isRecord3(content.itemContent) ? content.itemContent : void 0;
+        const content = isRecord(entry.content) ? entry.content : isRecord(entry.item) ? entry.item : void 0;
+        const itemContent = content && isRecord(content.itemContent) ? content.itemContent : void 0;
         if (itemContent?.promotedMetadata) {
           entries.splice(i, 1);
           i--;
           continue;
         }
-        const socialCtx = (itemContent && isRecord3(itemContent.socialContext) ? itemContent.socialContext : void 0) ?? (content && isRecord3(content.clientEventInfo) ? content.clientEventInfo : void 0);
-        const socialFollowing = isRecord3(socialCtx) && typeof socialCtx.contextType === "string" && socialCtx.contextType === "Follow";
-        if (itemContent && isRecord3(itemContent.tweet_results)) {
+        const socialCtx = (itemContent && isRecord(itemContent.socialContext) ? itemContent.socialContext : void 0) ?? (content && isRecord(content.clientEventInfo) ? content.clientEventInfo : void 0);
+        const socialFollowing = isRecord(socialCtx) && typeof socialCtx.contextType === "string" && socialCtx.contextType === "Follow";
+        if (itemContent && isRecord(itemContent.tweet_results)) {
           const tweet = unwrapTweet(itemContent.tweet_results.result);
           if (!tweet) continue;
           const ytIds = extractTweetYouTubeIds(tweet);
@@ -1192,9 +1301,9 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
           }
           continue;
         }
-        if (itemContent && typeof itemContent.name === "string" && (itemContent.__typename === "TimelineTrend" || isRecord3(itemContent.trendMetadata) || entryId.startsWith("trend-"))) {
+        if (itemContent && typeof itemContent.name === "string" && (itemContent.__typename === "TimelineTrend" || isRecord(itemContent.trendMetadata) || entryId.startsWith("trend-"))) {
           const trendName = itemContent.name.trim();
-          const trendMeta = isRecord3(itemContent.trendMetadata) ? itemContent.trendMetadata : {};
+          const trendMeta = isRecord(itemContent.trendMetadata) ? itemContent.trendMetadata : {};
           const domainCtx = typeof trendMeta.domainContext === "string" ? trendMeta.domainContext : void 0;
           const metaDesc = typeof trendMeta.metaDescription === "string" ? trendMeta.metaDescription : "";
           if (/promoted/i.test(metaDesc)) {
@@ -1218,7 +1327,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       }
     }
     walkInstructions(data);
-    if (candidates.size === 0 || !config2.x.caliberFilter || isAdsOnlySurface) {
+    if (candidates.size === 0) {
       return data;
     }
     const droppedIds = await decide([...candidates.values()]);
@@ -1237,7 +1346,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     for (const [list, ids] of listsToPrune) {
       for (let i = list.length - 1; i >= 0; i--) {
         const entry = list[i];
-        if (!isRecord3(entry)) continue;
+        if (!isRecord(entry)) continue;
         const id = extractEntryId(entry);
         if (id && ids.has(id)) {
           list.splice(i, 1);
@@ -1276,19 +1385,20 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     return false;
   }
   function getCachedDeArrowTitle(videoId) {
-    const val = titleCache.get(videoId);
-    return val ?? void 0;
+    return titleCache.get(videoId) ?? void 0;
   }
   function clearDeArrowCache() {
     titleCache.clear();
     fetchedPrefixes.clear();
   }
   function pickBestCommunityTitle(record) {
-    if (!record || !Array.isArray(record.titles)) return null;
+    if (!isRecord(record) || !Array.isArray(record.titles)) return null;
     for (const candidate of record.titles) {
-      if (!candidate || candidate.original === true) continue;
-      if (candidate.locked !== true && (candidate.votes ?? -1) < 0) continue;
-      const cleaned = cleanDeArrowTitle(candidate.title ?? "");
+      if (!isRecord(candidate) || candidate.original === true) continue;
+      const votes = typeof candidate.votes === "number" ? candidate.votes : -1;
+      if (candidate.locked !== true && votes < 0) continue;
+      if (typeof candidate.title !== "string") continue;
+      const cleaned = cleanDeArrowTitle(candidate.title);
       if (cleaned.length >= 4) return cleaned;
     }
     return null;
@@ -1329,10 +1439,10 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
           });
           if (!res.ok) return;
           const bucket = await res.json();
+          if (!isRecord(bucket)) return;
           fetchedPrefixes.set(prefix, now);
           for (const [vid, rec] of Object.entries(bucket)) {
-            const best = pickBestCommunityTitle(rec);
-            titleCache.set(vid, best);
+            titleCache.set(vid, pickBestCommunityTitle(rec));
           }
           for (const reqVid of requestedVids) {
             if (!titleCache.has(reqVid)) titleCache.set(reqVid, null);
@@ -1377,24 +1487,10 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     "contents",
     "itemSectionRenderer"
   ]);
-  function isRecord4(value) {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-  }
-  function isYouTubeSafeRoute(pageUrl) {
-    try {
-      const pathname = new URL(pageUrl).pathname.replace(/\/+$/, "") || "/";
-      if (pathname === "/" || pathname === "/watch" || pathname === "/results") {
-        return false;
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
   function isYouTubeChannelPayload(data) {
-    if (!isRecord4(data)) return false;
-    if (isRecord4(data.metadata) && isRecord4(data.metadata.channelMetadataRenderer)) return true;
-    if (isRecord4(data.header) && (isRecord4(data.header.pageHeaderRenderer) || isRecord4(data.header.c4TabbedHeaderRenderer))) {
+    if (!isRecord(data)) return false;
+    if (isRecord(data.metadata) && isRecord(data.metadata.channelMetadataRenderer)) return true;
+    if (isRecord(data.header) && (isRecord(data.header.pageHeaderRenderer) || isRecord(data.header.c4TabbedHeaderRenderer))) {
       return true;
     }
     return false;
@@ -1405,21 +1501,21 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     return "home";
   }
   function readText(node) {
-    if (!isRecord4(node)) return "";
+    if (!isRecord(node)) return "";
     if (typeof node.simpleText === "string") return node.simpleText;
     if (typeof node.content === "string") return node.content;
     if (Array.isArray(node.runs)) {
-      return node.runs.map((run) => isRecord4(run) && typeof run.text === "string" ? run.text : "").join("");
+      return node.runs.map((run) => isRecord(run) && typeof run.text === "string" ? run.text : "").join("");
     }
     return "";
   }
   function rewriteText(node, transform) {
-    if (!isRecord4(node)) return;
+    if (!isRecord(node)) return;
     if (typeof node.simpleText === "string") {
       node.simpleText = transform(node.simpleText);
     } else if (typeof node.content === "string") {
       node.content = transform(node.content);
-    } else if (Array.isArray(node.runs) && node.runs.length === 1 && isRecord4(node.runs[0])) {
+    } else if (Array.isArray(node.runs) && node.runs.length === 1 && isRecord(node.runs[0])) {
       const single = node.runs[0];
       if (typeof single.text === "string") {
         single.text = transform(single.text);
@@ -1443,7 +1539,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   function containsShortsUrl(obj) {
     if (typeof obj === "string") return obj.startsWith("/shorts/");
     if (Array.isArray(obj)) return obj.some(containsShortsUrl);
-    if (isRecord4(obj)) {
+    if (isRecord(obj)) {
       for (const [k, v] of Object.entries(obj)) {
         if (SHORTS_KEYS.has(k)) return true;
         if ((k === "url" || k === "canonicalBaseUrl") && typeof v === "string" && v.startsWith("/shorts")) {
@@ -1466,11 +1562,11 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     const byline = renderer.shortBylineText ?? renderer.longBylineText ?? renderer.ownerText;
     const channelName = readText(byline);
     let channelId;
-    if (isRecord4(byline) && Array.isArray(byline.runs)) {
+    if (isRecord(byline) && Array.isArray(byline.runs)) {
       for (const run of byline.runs) {
-        if (!isRecord4(run) || !isRecord4(run.navigationEndpoint)) continue;
+        if (!isRecord(run) || !isRecord(run.navigationEndpoint)) continue;
         const browse = run.navigationEndpoint.browseEndpoint;
-        if (isRecord4(browse)) {
+        if (isRecord(browse)) {
           if (typeof browse.browseId === "string") channelId = browse.browseId;
           if (!channelId && typeof browse.canonicalBaseUrl === "string") {
             channelId = browse.canonicalBaseUrl.replace(/^\//, "");
@@ -1491,8 +1587,8 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     };
   }
   function findBrowseEndpoint(node) {
-    if (!isRecord4(node)) return {};
-    if (isRecord4(node.browseEndpoint)) {
+    if (!isRecord(node)) return {};
+    if (isRecord(node.browseEndpoint)) {
       const be = node.browseEndpoint;
       const browseId = typeof be.browseId === "string" ? be.browseId : void 0;
       const base = typeof be.canonicalBaseUrl === "string" ? be.canonicalBaseUrl : "";
@@ -1500,7 +1596,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       if (browseId || handle) return { browseId, handle };
     }
     for (const val of Object.values(node)) {
-      if (isRecord4(val) || Array.isArray(val)) {
+      if (isRecord(val) || Array.isArray(val)) {
         const hit = findBrowseEndpoint(val);
         if (hit.browseId || hit.handle) return hit;
       }
@@ -1508,15 +1604,15 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     return {};
   }
   function findLockupDurationSec(contentImage) {
-    if (!isRecord4(contentImage)) return void 0;
+    if (!isRecord(contentImage)) return void 0;
     const tvm = contentImage.thumbnailViewModel;
-    if (!isRecord4(tvm) || !Array.isArray(tvm.overlays)) return void 0;
+    if (!isRecord(tvm) || !Array.isArray(tvm.overlays)) return void 0;
     for (const ov of tvm.overlays) {
-      if (!isRecord4(ov) || !isRecord4(ov.thumbnailOverlayBadgeViewModel)) continue;
+      if (!isRecord(ov) || !isRecord(ov.thumbnailOverlayBadgeViewModel)) continue;
       const badges = ov.thumbnailOverlayBadgeViewModel.thumbnailBadges;
       if (!Array.isArray(badges)) continue;
       for (const b of badges) {
-        if (isRecord4(b) && isRecord4(b.thumbnailBadgeViewModel) && typeof b.thumbnailBadgeViewModel.text === "string") {
+        if (isRecord(b) && isRecord(b.thumbnailBadgeViewModel) && typeof b.thumbnailBadgeViewModel.text === "string") {
           const parsed = parseDurationSec(b.thumbnailBadgeViewModel.text);
           if (parsed !== void 0) return parsed;
         }
@@ -1527,19 +1623,19 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   function extractFromLockup(lockup, surface) {
     const id = typeof lockup.contentId === "string" ? lockup.contentId : "";
     if (!id || id.length !== 11) return null;
-    const meta = isRecord4(lockup.metadata) ? lockup.metadata.lockupMetadataViewModel : void 0;
-    if (!isRecord4(meta)) return null;
+    const meta = isRecord(lockup.metadata) ? lockup.metadata.lockupMetadataViewModel : void 0;
+    if (!isRecord(meta)) return null;
     const title = readText(meta.title);
     if (!title) return null;
     const { browseId, handle } = findBrowseEndpoint(meta.image ?? meta.metadata);
     let channelDisplayName = "";
     const contextParts = [];
-    const contentMeta = isRecord4(meta.metadata) ? meta.metadata.contentMetadataViewModel : void 0;
-    if (isRecord4(contentMeta) && Array.isArray(contentMeta.metadataRows)) {
+    const contentMeta = isRecord(meta.metadata) ? meta.metadata.contentMetadataViewModel : void 0;
+    if (isRecord(contentMeta) && Array.isArray(contentMeta.metadataRows)) {
       contentMeta.metadataRows.forEach((row, rowIdx) => {
-        if (!isRecord4(row) || !Array.isArray(row.metadataParts)) return;
+        if (!isRecord(row) || !Array.isArray(row.metadataParts)) return;
         for (const part of row.metadataParts) {
-          if (!isRecord4(part)) continue;
+          if (!isRecord(part)) continue;
           const txt = readText(part.text).trim();
           if (!txt) continue;
           if (rowIdx === 0 && !channelDisplayName) channelDisplayName = txt;
@@ -1572,9 +1668,9 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       if (renderer.title) rewriteText(renderer.title, (t) => resolveBetterYouTubeTitle(t, id, config2));
       if (renderer.headline) rewriteText(renderer.headline, (t) => resolveBetterYouTubeTitle(t, id, config2));
     }
-    if (config2.youtube.midFrameThumbs && isRecord4(renderer.thumbnail) && Array.isArray(renderer.thumbnail.thumbnails)) {
+    if (config2.youtube.midFrameThumbs && isRecord(renderer.thumbnail) && Array.isArray(renderer.thumbnail.thumbnails)) {
       for (const thumb of renderer.thumbnail.thumbnails) {
-        if (isRecord4(thumb) && typeof thumb.url === "string") {
+        if (isRecord(thumb) && typeof thumb.url === "string") {
           thumb.url = midFrameThumbUrl(thumb.url, id);
         }
       }
@@ -1582,17 +1678,17 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   }
   function dehypeLockup(lockup, config2) {
     const id = typeof lockup.contentId === "string" ? lockup.contentId : void 0;
-    if ((config2.youtube.calmTitles || config2.youtube.dearrowTitles) && isRecord4(lockup.metadata)) {
+    if ((config2.youtube.calmTitles || config2.youtube.dearrowTitles) && isRecord(lockup.metadata)) {
       const meta = lockup.metadata.lockupMetadataViewModel;
-      if (isRecord4(meta) && meta.title) {
+      if (isRecord(meta) && meta.title) {
         rewriteText(meta.title, (t) => resolveBetterYouTubeTitle(t, id, config2));
       }
     }
-    if (config2.youtube.midFrameThumbs && isRecord4(lockup.contentImage)) {
+    if (config2.youtube.midFrameThumbs && isRecord(lockup.contentImage)) {
       const tvm = lockup.contentImage.thumbnailViewModel;
-      if (isRecord4(tvm) && isRecord4(tvm.image) && Array.isArray(tvm.image.sources)) {
+      if (isRecord(tvm) && isRecord(tvm.image) && Array.isArray(tvm.image.sources)) {
         for (const src of tvm.image.sources) {
-          if (isRecord4(src) && typeof src.url === "string") {
+          if (isRecord(src) && typeof src.url === "string") {
             src.url = midFrameThumbUrl(src.url, id);
           }
         }
@@ -1601,7 +1697,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
   }
   async function filterYouTubeJson(data, urlPath, pageUrl, config2, decide) {
     if (!config2.enabled || !config2.youtube.enabled) return data;
-    if (!isRecord4(data) && !Array.isArray(data)) return data;
+    if (!isRecord(data) && !Array.isArray(data)) return data;
     const surface = surfaceFromEndpoint(urlPath);
     const safeRoute = isYouTubeSafeRoute(pageUrl) || isYouTubeChannelPayload(data);
     const candidates = /* @__PURE__ */ new Map();
@@ -1617,7 +1713,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
         }
         return removedAny && node.length === 0;
       }
-      if (!isRecord4(node)) return false;
+      if (!isRecord(node)) return false;
       for (const key of Object.keys(node)) {
         if (AD_AND_NOISE_KEYS.has(key)) {
           delete node[key];
@@ -1632,7 +1728,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
           return Object.keys(node).length === 0;
         }
       }
-      if (isRecord4(node.lockupViewModel)) {
+      if (isRecord(node.lockupViewModel)) {
         if (isMixLockup(node.lockupViewModel)) {
           delete node.lockupViewModel;
           return Object.keys(node).length === 0;
@@ -1648,7 +1744,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       }
       for (const key of VIDEO_RENDERER_KEYS) {
         const renderer = node[key];
-        if (!isRecord4(renderer)) continue;
+        if (!isRecord(renderer)) continue;
         if (config2.youtube.hideShorts && containsShortsUrl(renderer.navigationEndpoint)) {
           delete node[key];
           return Object.keys(node).length === 0;
@@ -1671,7 +1767,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       return lostPrimaryContent || Object.keys(node).length === 0;
     }
     collectAndStripNoise(data);
-    const droppedIds = candidates.size > 0 && !safeRoute && config2.youtube.caliberFilter ? await decide([...candidates.values()]) : /* @__PURE__ */ new Set();
+    const droppedIds = candidates.size > 0 ? await decide([...candidates.values()]) : /* @__PURE__ */ new Set();
     function applyVerdictsAndDehype(node) {
       if (Array.isArray(node)) {
         let removedAny = false;
@@ -1683,8 +1779,8 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
         }
         return removedAny && node.length === 0;
       }
-      if (!isRecord4(node)) return false;
-      if (isRecord4(node.lockupViewModel)) {
+      if (!isRecord(node)) return false;
+      if (isRecord(node.lockupViewModel)) {
         const id = typeof node.lockupViewModel.contentId === "string" ? node.lockupViewModel.contentId : "";
         if (id && droppedIds.has(id)) {
           delete node.lockupViewModel;
@@ -1694,7 +1790,7 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
       }
       for (const key of VIDEO_RENDERER_KEYS) {
         const renderer = node[key];
-        if (!isRecord4(renderer)) continue;
+        if (!isRecord(renderer)) continue;
         const id = typeof renderer.videoId === "string" ? renderer.videoId : "";
         if (id && droppedIds.has(id)) {
           delete node[key];
@@ -1761,102 +1857,16 @@ ${VERDICT_OUTPUT_INSTRUCTIONS}`
     }
   }
 
-  // src/defaults.ts
-  var CURRENT_SCHEMA_VERSION = 6;
-  var DEFAULT_RUBRIC = `Evaluate each item across four axes:
-1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
-2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
-3. Substance: real signal, art, humor, or insight vs padded filler or recycled sludge.
-4. Freshness: timely updates, strange rabbit holes, or original work vs rehashed outrage.
-
-Keep items that show genuine human craft, curiosity, engineering, hardware, software, science, design, art, cinematography, music, timely primary news, or earnest humor, even from tiny unknown creators.
-
-Drop items that fail Authenticity or Substance: ragebait, political or culture-war fights, cynical dunking, celebrity or reality-TV gossip, episodic short-drama cliffhangers, AI-generated narration or visual slop, engagement hooks ("wait till the end", "feel illegal to know", "comment X for link", siren-emoji fake breaking hype), hustle or crypto grifts, and manufactured anxiety. When uncertain, keep.`;
-  var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
-  var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
-  var DEFAULT_CONFIG = {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    enabled: true,
-    passFollowed: true,
-    noveltyFilter: true,
-    youtube: {
-      enabled: true,
-      caliberFilter: true,
-      hideShorts: true,
-      cleanHeader: true,
-      midFrameThumbs: true,
-      calmTitles: true,
-      dearrowTitles: true
-    },
-    x: {
-      enabled: true,
-      caliberFilter: true,
-      slopCadenceFilter: true,
-      classicBird: true,
-      cleanSidebar: true,
-      cleanNav: true,
-      restoreHeadlines: true
-    },
-    instagram: {
-      enabled: true,
-      caliberFilter: true,
-      filterReels: true,
-      hideClutter: true
-    },
-    tiktok: {
-      enabled: true,
-      caliberFilter: true,
-      cleanChrome: true,
-      lightMode: true,
-      postOnlyMode: false
-    },
-    grader: {
-      mode: "local",
-      endpoint: LOCAL_DEFAULT_ENDPOINT,
-      model: LOCAL_DEFAULT_MODEL,
-      apiKey: "",
-      rubric: DEFAULT_RUBRIC,
-      streamHoldMs: 1500
-    },
-    allowHandles: [],
-    blockHandles: []
-  };
-  function mergeConfig(stored) {
-    if (!stored || typeof stored !== "object") return structuredClone(DEFAULT_CONFIG);
-    const oldSchema = stored.schemaVersion ?? 1;
-    const mergedTikTok = { ...DEFAULT_CONFIG.tiktok, ...stored.tiktok ?? {} };
-    if (oldSchema < 2) {
-      mergedTikTok.postOnlyMode = false;
-    }
-    if (oldSchema < 4 && stored.tiktok?.lightMode === void 0) {
-      mergedTikTok.lightMode = true;
-    }
-    const mergedGrader = { ...DEFAULT_CONFIG.grader, ...stored.grader ?? {} };
-    if (oldSchema < 6 && mergedGrader.streamHoldMs <= 900) {
-      mergedGrader.streamHoldMs = 1500;
-    }
-    if (oldSchema < 5 && (!stored.grader?.rubric || stored.grader.rubric.startsWith("Keep genuine human craft") || stored.grader.rubric.startsWith("Keep enticing, high-agency"))) {
-      mergedGrader.rubric = DEFAULT_RUBRIC;
-    }
-    return {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      enabled: stored.enabled ?? DEFAULT_CONFIG.enabled,
-      passFollowed: stored.passFollowed ?? DEFAULT_CONFIG.passFollowed,
-      noveltyFilter: stored.noveltyFilter ?? DEFAULT_CONFIG.noveltyFilter,
-      youtube: { ...DEFAULT_CONFIG.youtube, ...stored.youtube ?? {} },
-      x: { ...DEFAULT_CONFIG.x, ...stored.x ?? {} },
-      instagram: { ...DEFAULT_CONFIG.instagram, ...stored.instagram ?? {} },
-      tiktok: mergedTikTok,
-      grader: mergedGrader,
-      allowHandles: Array.isArray(stored.allowHandles) ? [...stored.allowHandles] : [],
-      blockHandles: Array.isArray(stored.blockHandles) ? [...stored.blockHandles] : []
-    };
-  }
-
   // src/background/memory.ts
   var ITEM_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
   var CREATOR_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
   var DB_NAME = "sieve_memory_v1";
+  function isStoredVerdict(v) {
+    return isRecord(v) && typeof v.key === "string" && (v.verdict === "keep" || v.verdict === "drop") && typeof v.at === "number";
+  }
+  function isCreatorRecord(v) {
+    return isRecord(v) && typeof v.key === "string" && typeof v.keeps === "number" && typeof v.drops === "number" && typeof v.updatedAt === "number";
+  }
   function openDb() {
     if (typeof indexedDB === "undefined") return Promise.resolve(null);
     return new Promise((resolve) => {
@@ -1891,18 +1901,18 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         const tx = db.transaction(["items", "creators"], "readonly");
         const itemReq = tx.objectStore("items").getAll();
         itemReq.onsuccess = () => {
-          const rows = itemReq.result ?? [];
-          for (const row of rows) {
-            if (now - row.at <= ITEM_TTL_MS && items.size < maxItems) {
+          if (!Array.isArray(itemReq.result)) return;
+          for (const row of itemReq.result) {
+            if (isStoredVerdict(row) && now - row.at <= ITEM_TTL_MS && items.size < maxItems) {
               items.set(row.key, row);
             }
           }
         };
         const creatorReq = tx.objectStore("creators").getAll();
         creatorReq.onsuccess = () => {
-          const rows = creatorReq.result ?? [];
-          for (const row of rows) {
-            if (now - row.updatedAt <= CREATOR_TTL_MS) {
+          if (!Array.isArray(creatorReq.result)) return;
+          for (const row of creatorReq.result) {
+            if (isCreatorRecord(row) && now - row.updatedAt <= CREATOR_TTL_MS) {
               creators.set(row.key, row);
             }
           }
@@ -2168,6 +2178,9 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     "you",
     "your"
   ]);
+  function isDwelledEntry(v) {
+    return isRecord(v) && typeof v.id === "string" && typeof v.at === "number" && Array.isArray(v.tokens) && v.tokens.every((t) => typeof t === "string");
+  }
   function extractSignatureTokens(text) {
     const out = /* @__PURE__ */ new Set();
     if (!text) return out;
@@ -2175,7 +2188,6 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     for (const raw of withoutUrls.split(/[^a-z0-9]+/)) {
       if (raw.length < 3) continue;
       if (STOPWORDS.has(raw)) continue;
-      if (/^\d+$/.test(raw) && raw.length < 2) continue;
       out.add(raw);
     }
     return out;
@@ -2206,8 +2218,8 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       try {
         const req = db.transaction("dwelled", "readonly").objectStore("dwelled").getAll();
         req.onsuccess = () => {
-          const rows = req.result ?? [];
-          rows.filter((r) => now - r.at <= NOVELTY_TTL_MS && Array.isArray(r.tokens)).slice(-MAX_NOVELTY_RECORDS).forEach((r) => {
+          if (!Array.isArray(req.result)) return;
+          req.result.filter((r) => isDwelledEntry(r) && now - r.at <= NOVELTY_TTL_MS).slice(-MAX_NOVELTY_RECORDS).forEach((r) => {
             entries.push({ id: r.id, tokenSet: new Set(r.tokens), at: r.at });
           });
         };
@@ -2317,13 +2329,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   async function initConfigAndSeeds() {
     try {
       const stored = await browser.storage.local.get("sieveConfig");
-      const rawStored = stored.sieveConfig;
-      const needsVerdictReset = rawStored && (rawStored.schemaVersion ?? 1) < 6;
-      config = mergeConfig(rawStored);
-      if (needsVerdictReset) {
-        await memory.clear();
-        await browser.storage.local.set({ sieveConfig: config });
-      }
+      config = mergeConfig(stored.sieveConfig);
     } catch {
       config = structuredClone(DEFAULT_CONFIG);
     }
@@ -2392,17 +2398,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     }
     return false;
   }
-  function concatRawChunks(chunks) {
-    let total = 0;
-    for (const c of chunks) total += c.byteLength;
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const c of chunks) {
-      out.set(c, offset);
-      offset += c.byteLength;
-    }
-    return out;
-  }
+  var MAX_STREAM_BYTES = 12 * 1024 * 1024;
   browser.webRequest.onBeforeRequest.addListener(
     (details) => {
       if (!shouldFilterRequest(details)) return {};
@@ -2413,8 +2409,25 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         return {};
       }
       const chunks = [];
+      let bufferedBytes = 0;
+      let passthrough = false;
       filter.ondata = (event) => {
-        chunks.push(new Uint8Array(event.data));
+        if (passthrough) {
+          filter.write(event.data);
+          return;
+        }
+        const chunk = new Uint8Array(event.data);
+        bufferedBytes += chunk.byteLength;
+        if (bufferedBytes > MAX_STREAM_BYTES) {
+          passthrough = true;
+          if (chunks.length > 0) {
+            filter.write(concatByteChunks(chunks));
+            chunks.length = 0;
+          }
+          filter.write(chunk);
+          return;
+        }
+        chunks.push(chunk);
       };
       filter.onerror = () => {
         try {
@@ -2423,6 +2436,13 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         }
       };
       filter.onstop = async () => {
+        if (passthrough) {
+          try {
+            filter.close();
+          } catch {
+          }
+          return;
+        }
         try {
           const text = decodeUtf8Chunks(chunks);
           const parsedUrl = new URL(details.url);
@@ -2437,7 +2457,6 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
               decideBatch
             );
             filter.write(new TextEncoder().encode(rewritten));
-            filter.close();
             return;
           }
           const json = JSON.parse(text);
@@ -2454,7 +2473,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
           filter.write(new TextEncoder().encode(JSON.stringify(transformed)));
         } catch {
           if (chunks.length > 0) {
-            filter.write(concatRawChunks(chunks));
+            filter.write(concatByteChunks(chunks));
           }
         } finally {
           try {
@@ -2507,44 +2526,69 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     { urls: ["*://*.tiktok.com/*", "*://tiktok.com/*"] },
     ["blocking", "requestHeaders"]
   );
+  function parseGraderOverride(raw) {
+    if (!isRecord(raw)) return void 0;
+    const mode = raw.mode === "off" || raw.mode === "local" || raw.mode === "api" ? raw.mode : null;
+    if (!mode || typeof raw.endpoint !== "string" || typeof raw.model !== "string" || typeof raw.apiKey !== "string" || typeof raw.rubric !== "string" || typeof raw.streamHoldMs !== "number") {
+      return void 0;
+    }
+    return {
+      mode,
+      endpoint: raw.endpoint,
+      model: raw.model,
+      apiKey: raw.apiKey,
+      rubric: raw.rubric,
+      streamHoldMs: raw.streamHoldMs
+    };
+  }
   browser.runtime.onMessage.addListener((raw) => {
-    const msg = raw && typeof raw === "object" ? raw : {};
-    if (msg.type === "GET_STATUS") {
+    if (!isRecord(raw) || typeof raw.type !== "string") return void 0;
+    if (raw.type === "GET_STATUS") {
       const stats = memory.counts();
-      return Promise.resolve({
+      const status = {
         sessionFilteredCount,
         cachedItems: stats.cachedItems,
         learnedCreators: stats.learnedCreators,
         dwelledCount: novelty.size(),
         hnVideos: seeds.hnVideos.size,
         slopChannels: seeds.slopChannels.size
-      });
+      };
+      return Promise.resolve(status);
     }
-    if (msg.type === "CLEAR_CACHE") {
+    if (raw.type === "CLEAR_CACHE") {
       sessionFilteredCount = 0;
       novelty.clear();
       clearDeArrowCache();
       return memory.clear().then(() => ({ ok: true }));
     }
-    if (msg.type === "RECORD_DWELL" && typeof msg.text === "string") {
+    if (raw.type === "RECORD_DWELL" && typeof raw.text === "string") {
       if (config.enabled && config.noveltyFilter) {
-        novelty.recordDwelled(msg.text);
+        novelty.recordDwelled(raw.text);
       }
       return Promise.resolve({ ok: true });
     }
-    if (msg.type === "RESOLVE_DEARROW_TITLES" && Array.isArray(msg.videoIds)) {
+    if (raw.type === "RESOLVE_DEARROW_TITLES" && Array.isArray(raw.videoIds)) {
       if (!config.enabled || !config.youtube.enabled || !config.youtube.dearrowTitles) {
         return Promise.resolve({ titles: {} });
       }
-      return lookupDeArrowTitles(msg.videoIds).then((map) => ({
-        titles: Object.fromEntries(map)
-      }));
+      const videoIds = raw.videoIds.filter((id) => typeof id === "string");
+      return lookupDeArrowTitles(videoIds).then(
+        (map) => ({
+          titles: Object.fromEntries(map)
+        })
+      );
     }
-    if (msg.type === "EVALUATE_SSR_ITEMS" && Array.isArray(msg.items)) {
-      return decideBatch(msg.items).then((dropped) => ({ dropped: [...dropped] }));
+    if (raw.type === "EVALUATE_SSR_ITEMS" && Array.isArray(raw.items)) {
+      const items = raw.items.filter(
+        (item) => isRecord(item) && typeof item.id === "string" && typeof item.titleOrText === "string"
+      );
+      return decideBatch(items).then(
+        (dropped) => ({ dropped: [...dropped] })
+      );
     }
-    if (msg.type === "TEST_GRADER") {
-      const testConfig = msg.graderOverride ? { ...config, grader: msg.graderOverride } : config;
+    if (raw.type === "TEST_GRADER") {
+      const override = parseGraderOverride(raw.graderOverride);
+      const testConfig = override ? { ...config, grader: override } : config;
       const probe = [
         {
           platform: "youtube",
@@ -2562,15 +2606,19 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         }
       ];
       const started = Date.now();
-      return gradeItemsBatch(probe, testConfig).then((drops) => ({
-        ok: true,
-        ms: Date.now() - started,
-        droppedProbeSlop: drops.has("probe_slop")
-      })).catch((err) => ({
-        ok: false,
-        ms: Date.now() - started,
-        error: err instanceof Error ? err.message : "Request failed"
-      }));
+      return gradeItemsBatch(probe, testConfig).then(
+        (drops) => ({
+          ok: true,
+          ms: Date.now() - started,
+          droppedProbeSlop: drops.has("probe_slop")
+        })
+      ).catch(
+        (err) => ({
+          ok: false,
+          ms: Date.now() - started,
+          error: err instanceof Error ? err.message : "Request failed"
+        })
+      );
     }
     return void 0;
   });

@@ -168,7 +168,7 @@
     return word.replace(/[A-Za-z]/, (ch) => ch.toUpperCase());
   }
   function isUrlOrHandle(part) {
-    return /^(?:https?:\/\/|www\.|@)/i.test(part.trim());
+    return /^(?:https?:\/\/|www\.|@)/i.test(part.trim()) || part.includes("_");
   }
   function calmTitle(title) {
     if (!title) return title;
@@ -233,8 +233,13 @@
     }).join("");
   }
 
+  // src/types.ts
+  function isRecord(v) {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+  }
+
   // src/defaults.ts
-  var CURRENT_SCHEMA_VERSION = 6;
+  var SCHEMA_VERSION = 1;
   var DEFAULT_RUBRIC = `Evaluate each item across four axes:
 1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
 2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
@@ -247,7 +252,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
   var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
   var DEFAULT_CONFIG = {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
+    schemaVersion: SCHEMA_VERSION,
     enabled: true,
     passFollowed: true,
     noveltyFilter: true,
@@ -293,35 +298,68 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     allowHandles: [],
     blockHandles: []
   };
+  function readStringList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => typeof item === "string");
+  }
+  function bool(obj, key, fallback) {
+    return typeof obj[key] === "boolean" ? obj[key] : fallback;
+  }
   function mergeConfig(stored) {
-    if (!stored || typeof stored !== "object") return structuredClone(DEFAULT_CONFIG);
-    const oldSchema = stored.schemaVersion ?? 1;
-    const mergedTikTok = { ...DEFAULT_CONFIG.tiktok, ...stored.tiktok ?? {} };
-    if (oldSchema < 2) {
-      mergedTikTok.postOnlyMode = false;
-    }
-    if (oldSchema < 4 && stored.tiktok?.lightMode === void 0) {
-      mergedTikTok.lightMode = true;
-    }
-    const mergedGrader = { ...DEFAULT_CONFIG.grader, ...stored.grader ?? {} };
-    if (oldSchema < 6 && mergedGrader.streamHoldMs <= 900) {
-      mergedGrader.streamHoldMs = 1500;
-    }
-    if (oldSchema < 5 && (!stored.grader?.rubric || stored.grader.rubric.startsWith("Keep genuine human craft") || stored.grader.rubric.startsWith("Keep enticing, high-agency"))) {
-      mergedGrader.rubric = DEFAULT_RUBRIC;
-    }
+    if (!isRecord(stored)) return structuredClone(DEFAULT_CONFIG);
+    const yt = isRecord(stored.youtube) ? stored.youtube : {};
+    const x = isRecord(stored.x) ? stored.x : {};
+    const ig = isRecord(stored.instagram) ? stored.instagram : {};
+    const tt = isRecord(stored.tiktok) ? stored.tiktok : {};
+    const gr = isRecord(stored.grader) ? stored.grader : {};
+    const d = DEFAULT_CONFIG;
+    const mode = gr.mode === "off" || gr.mode === "local" || gr.mode === "api" ? gr.mode : d.grader.mode;
     return {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      enabled: stored.enabled ?? DEFAULT_CONFIG.enabled,
-      passFollowed: stored.passFollowed ?? DEFAULT_CONFIG.passFollowed,
-      noveltyFilter: stored.noveltyFilter ?? DEFAULT_CONFIG.noveltyFilter,
-      youtube: { ...DEFAULT_CONFIG.youtube, ...stored.youtube ?? {} },
-      x: { ...DEFAULT_CONFIG.x, ...stored.x ?? {} },
-      instagram: { ...DEFAULT_CONFIG.instagram, ...stored.instagram ?? {} },
-      tiktok: mergedTikTok,
-      grader: mergedGrader,
-      allowHandles: Array.isArray(stored.allowHandles) ? [...stored.allowHandles] : [],
-      blockHandles: Array.isArray(stored.blockHandles) ? [...stored.blockHandles] : []
+      schemaVersion: SCHEMA_VERSION,
+      enabled: bool(stored, "enabled", d.enabled),
+      passFollowed: bool(stored, "passFollowed", d.passFollowed),
+      noveltyFilter: bool(stored, "noveltyFilter", d.noveltyFilter),
+      youtube: {
+        enabled: bool(yt, "enabled", d.youtube.enabled),
+        caliberFilter: bool(yt, "caliberFilter", d.youtube.caliberFilter),
+        hideShorts: bool(yt, "hideShorts", d.youtube.hideShorts),
+        cleanHeader: bool(yt, "cleanHeader", d.youtube.cleanHeader),
+        midFrameThumbs: bool(yt, "midFrameThumbs", d.youtube.midFrameThumbs),
+        calmTitles: bool(yt, "calmTitles", d.youtube.calmTitles),
+        dearrowTitles: bool(yt, "dearrowTitles", d.youtube.dearrowTitles)
+      },
+      x: {
+        enabled: bool(x, "enabled", d.x.enabled),
+        caliberFilter: bool(x, "caliberFilter", d.x.caliberFilter),
+        slopCadenceFilter: bool(x, "slopCadenceFilter", d.x.slopCadenceFilter),
+        classicBird: bool(x, "classicBird", d.x.classicBird),
+        cleanSidebar: bool(x, "cleanSidebar", d.x.cleanSidebar),
+        cleanNav: bool(x, "cleanNav", d.x.cleanNav),
+        restoreHeadlines: bool(x, "restoreHeadlines", d.x.restoreHeadlines)
+      },
+      instagram: {
+        enabled: bool(ig, "enabled", d.instagram.enabled),
+        caliberFilter: bool(ig, "caliberFilter", d.instagram.caliberFilter),
+        filterReels: bool(ig, "filterReels", d.instagram.filterReels),
+        hideClutter: bool(ig, "hideClutter", d.instagram.hideClutter)
+      },
+      tiktok: {
+        enabled: bool(tt, "enabled", d.tiktok.enabled),
+        caliberFilter: bool(tt, "caliberFilter", d.tiktok.caliberFilter),
+        cleanChrome: bool(tt, "cleanChrome", d.tiktok.cleanChrome),
+        lightMode: bool(tt, "lightMode", d.tiktok.lightMode),
+        postOnlyMode: bool(tt, "postOnlyMode", d.tiktok.postOnlyMode)
+      },
+      grader: {
+        mode,
+        endpoint: typeof gr.endpoint === "string" ? gr.endpoint : d.grader.endpoint,
+        model: typeof gr.model === "string" ? gr.model : d.grader.model,
+        apiKey: typeof gr.apiKey === "string" ? gr.apiKey : d.grader.apiKey,
+        rubric: typeof gr.rubric === "string" ? gr.rubric : d.grader.rubric,
+        streamHoldMs: typeof gr.streamHoldMs === "number" && Number.isFinite(gr.streamHoldMs) ? gr.streamHoldMs : d.grader.streamHoldMs
+      },
+      allowHandles: readStringList(stored.allowHandles),
+      blockHandles: readStringList(stored.blockHandles)
     };
   }
 
@@ -332,7 +370,12 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       const raw = localStorage.getItem(LOCAL_CACHE_KEY);
       if (!raw) return {};
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
+      if (!isRecord(parsed)) return {};
+      const out = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string") out[k] = v;
+      }
+      return out;
     } catch {
       return {};
     }
@@ -354,7 +397,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   }
   function bootSiteAdapter(onConfig) {
     const cached = readCachedFlags();
-    if (Object.keys(cached).length > 0 && document.documentElement) {
+    if (document.documentElement) {
       for (const [k, v] of Object.entries(cached)) {
         if (v && v !== "0") document.documentElement.dataset[k] = v;
       }
@@ -372,6 +415,40 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         onConfig(current);
       }
     });
+  }
+  function rememberBounded(set, key, max = 4e3) {
+    if (set.has(key)) return false;
+    if (set.size >= max) {
+      const oldest = set.values().next().value;
+      if (oldest !== void 0) set.delete(oldest);
+    }
+    set.add(key);
+    return true;
+  }
+  function createRafScheduler(run) {
+    let pending = false;
+    return () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        run();
+      });
+    };
+  }
+  async function evaluateDomBatch(items, onDrop) {
+    if (items.length === 0) return;
+    try {
+      const res = await browser.runtime.sendMessage({
+        type: "EVALUATE_SSR_ITEMS",
+        items
+      });
+      if (!isRecord(res) || !Array.isArray(res.dropped)) return;
+      for (const id of res.dropped) {
+        if (typeof id === "string") onDrop(id);
+      }
+    } catch {
+    }
   }
   function pauseAllMedia(root = document) {
     root.querySelectorAll("video, audio").forEach((el) => {
@@ -393,7 +470,6 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   ]);
   var ZERO_WIDTH_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
   var activeConfig = null;
-  var scanPending = false;
   var evaluatedIgPosts = /* @__PURE__ */ new Set();
   function readHeaderLabels(article) {
     const actionBoundary = article.querySelector("section");
@@ -472,8 +548,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       const handle = authorLink?.getAttribute("href")?.replace(/^\/|\/$/g, "").split("/")[0] ?? void 0;
       const text = article.textContent?.replace(/\s+/g, " ").trim().slice(0, 220) ?? "";
       const id = href || `ig_dom_${idx}_${text.slice(0, 24)}`;
-      if (!id || evaluatedIgPosts.has(id)) return;
-      evaluatedIgPosts.add(id);
+      if (!id || !rememberBounded(evaluatedIgPosts, id)) return;
       articleById.set(id, article);
       batch.push({
         platform: "instagram",
@@ -484,24 +559,15 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         titleOrText: text
       });
     });
-    if (batch.length === 0) return;
-    try {
-      const res = await browser.runtime.sendMessage({
-        type: "EVALUATE_SSR_ITEMS",
-        items: batch
-      });
-      for (const dropId of res.dropped ?? []) {
-        const article = articleById.get(dropId);
-        if (article) {
-          article.dataset.sieveHidden = "1";
-          pauseAllMedia(article);
-        }
+    await evaluateDomBatch(batch, (dropId) => {
+      const article = articleById.get(dropId);
+      if (article) {
+        article.dataset.sieveHidden = "1";
+        pauseAllMedia(article);
       }
-    } catch {
-    }
+    });
   }
   function sweepInstagramDom() {
-    scanPending = false;
     const path = window.location.pathname;
     const igOn = Boolean(activeConfig?.enabled && activeConfig.instagram.enabled);
     const main = document.querySelector('main[role="main"], main');
@@ -534,15 +600,12 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     });
     void evaluateUnfollowedHomeArticles(main);
   }
-  function scheduleSweep() {
-    if (scanPending) return;
-    scanPending = true;
-    requestAnimationFrame(sweepInstagramDom);
-  }
+  var scheduleSweep = createRafScheduler(sweepInstagramDom);
   bootSiteAdapter((cfg) => {
     activeConfig = cfg;
     const igOn = cfg.enabled && cfg.instagram.enabled;
     applyHtmlFlags({
+      sieveIgOn: igOn ? "1" : "0",
       sieveIgClutter: igOn && cfg.instagram.hideClutter ? "1" : "0"
     });
     scheduleSweep();

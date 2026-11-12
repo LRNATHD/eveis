@@ -1,5 +1,12 @@
 import { creatorKeysFor } from "../core/sieve.js";
-import type { CreatorRecord, FeedItem, MemoryStore, Platform } from "../types.js";
+import {
+  isRecord,
+  type CreatorRecord,
+  type FeedItem,
+  type MemoryStore,
+  type Platform,
+  type ResolvedVerdict,
+} from "../types.js";
 
 const ITEM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CREATOR_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -7,12 +14,31 @@ const DB_NAME = "sieve_memory_v1";
 
 interface StoredVerdict {
   key: string;
-  verdict: "keep" | "drop";
+  verdict: ResolvedVerdict;
   at: number;
 }
 
-export interface MemoryOptions {
+interface MemoryOptions {
   maxItems?: number;
+}
+
+function isStoredVerdict(v: unknown): v is StoredVerdict {
+  return (
+    isRecord(v) &&
+    typeof v.key === "string" &&
+    (v.verdict === "keep" || v.verdict === "drop") &&
+    typeof v.at === "number"
+  );
+}
+
+function isCreatorRecord(v: unknown): v is CreatorRecord {
+  return (
+    isRecord(v) &&
+    typeof v.key === "string" &&
+    typeof v.keeps === "number" &&
+    typeof v.drops === "number" &&
+    typeof v.updatedAt === "number"
+  );
 }
 
 function openDb(): Promise<IDBDatabase | null> {
@@ -51,24 +77,24 @@ export function createMemoryStore(options: MemoryOptions = {}): MemoryStore {
       const tx = db.transaction(["items", "creators"], "readonly");
       const itemReq = tx.objectStore("items").getAll();
       itemReq.onsuccess = () => {
-        const rows = (itemReq.result ?? []) as StoredVerdict[];
-        for (const row of rows) {
-          if (now - row.at <= ITEM_TTL_MS && items.size < maxItems) {
+        if (!Array.isArray(itemReq.result)) return;
+        for (const row of itemReq.result) {
+          if (isStoredVerdict(row) && now - row.at <= ITEM_TTL_MS && items.size < maxItems) {
             items.set(row.key, row);
           }
         }
       };
       const creatorReq = tx.objectStore("creators").getAll();
       creatorReq.onsuccess = () => {
-        const rows = (creatorReq.result ?? []) as CreatorRecord[];
-        for (const row of rows) {
-          if (now - row.updatedAt <= CREATOR_TTL_MS) {
+        if (!Array.isArray(creatorReq.result)) return;
+        for (const row of creatorReq.result) {
+          if (isCreatorRecord(row) && now - row.updatedAt <= CREATOR_TTL_MS) {
             creators.set(row.key, row);
           }
         }
       };
     } catch {
-      // Ignore IndexedDB hydration failures in restricted contexts.
+      // Restricted or private contexts fall back to in-memory Maps.
     }
   });
 
@@ -80,7 +106,7 @@ export function createMemoryStore(options: MemoryOptions = {}): MemoryStore {
     return `${platform}:${creatorKey}`;
   }
 
-  function evaluateCreatorRecord(rec: CreatorRecord | undefined): "keep" | "drop" | undefined {
+  function evaluateCreatorRecord(rec: CreatorRecord | undefined): ResolvedVerdict | undefined {
     if (!rec) return undefined;
     if (Date.now() - rec.updatedAt > CREATOR_TTL_MS) {
       creators.delete(rec.key);
@@ -126,7 +152,7 @@ export function createMemoryStore(options: MemoryOptions = {}): MemoryStore {
       return undefined;
     },
 
-    async recordVerdict(item: FeedItem, verdict: "keep" | "drop") {
+    async recordVerdict(item: FeedItem, verdict: ResolvedVerdict) {
       if (verdict === "drop") droppedTotal += 1;
       const now = Date.now();
       const iKey = itemMapKey(item.platform, item.id);
@@ -172,7 +198,7 @@ export function createMemoryStore(options: MemoryOptions = {}): MemoryStore {
         const creatorStore = tx.objectStore("creators");
         for (const rec of updatedCreators) creatorStore.put(rec);
       } catch {
-        // Ignore persistence errors when disk is full or private mode restricts IDB.
+        // Private browsing or quota limits leave in-memory entries active.
       }
     },
 
@@ -187,7 +213,7 @@ export function createMemoryStore(options: MemoryOptions = {}): MemoryStore {
         tx.objectStore("items").clear();
         tx.objectStore("creators").clear();
       } catch {
-        // Ignore clear errors.
+        // Private browsing may reject write transactions.
       }
     },
 

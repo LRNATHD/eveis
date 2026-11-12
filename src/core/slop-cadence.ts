@@ -1,5 +1,4 @@
 // Structural LLM-slop cadence scorer adapted from midego1/slop-filter-for-x (MIT).
-// Tuned conservatively so normal short or technical human writing never trips the gate.
 
 const SLOP_LEXICON = [
   "delve",
@@ -73,7 +72,7 @@ const GENERIC_BOT_REPLY_RE =
 const EMOJI_BULLET_LINE_RE =
   /^\s*(?:[✅✔️🚀💡🔥📌🎯⚡️🧠📈💰👇🔑⭐️✨🙌💬🛠️📊🤝🎁]|[-•*]\s*[\p{Extended_Pictographic}])/u;
 
-export interface CadenceContext {
+interface CadenceContext {
   isReply?: boolean;
 }
 

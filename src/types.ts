@@ -1,18 +1,20 @@
 export type Platform = "youtube" | "x" | "instagram" | "tiktok";
 
-export type FeedSurface =
-  | "home"
-  | "search"
-  | "watch_next"
-  | "timeline"
-  | "replies"
-  | "reels";
+export type FeedSurface = "home" | "search" | "watch_next" | "timeline" | "reels";
 
-export type Verdict = "keep" | "drop" | "uncertain";
+export type ResolvedVerdict = "keep" | "drop";
+
+export type Verdict = ResolvedVerdict | "uncertain";
 
 export type GraderMode = "off" | "local" | "api";
 
-export interface YouTubeSettings {
+export type JsonRecord = Record<string, unknown>;
+
+export function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+interface YouTubeSettings {
   enabled: boolean;
   caliberFilter: boolean;
   hideShorts: boolean;
@@ -22,7 +24,7 @@ export interface YouTubeSettings {
   dearrowTitles: boolean;
 }
 
-export interface TwitterSettings {
+interface TwitterSettings {
   enabled: boolean;
   caliberFilter: boolean;
   slopCadenceFilter: boolean;
@@ -32,14 +34,14 @@ export interface TwitterSettings {
   restoreHeadlines: boolean;
 }
 
-export interface InstagramSettings {
+interface InstagramSettings {
   enabled: boolean;
   caliberFilter: boolean;
   filterReels: boolean;
   hideClutter: boolean;
 }
 
-export interface TikTokSettings {
+interface TikTokSettings {
   enabled: boolean;
   caliberFilter: boolean;
   cleanChrome: boolean;
@@ -77,14 +79,12 @@ export interface FeedItem {
   creatorHandle?: string;
   isFollowed?: boolean;
   isSponsored?: boolean;
-  isBlueReply?: boolean;
   surface: FeedSurface;
   titleOrText: string;
   secondaryText?: string;
   durationSec?: number;
   linkedYoutubeIds?: string[];
   metrics?: {
-    views?: number;
     likes?: number;
     replies?: number;
     quotes?: number;
@@ -105,14 +105,53 @@ export interface CreatorRecord {
 }
 
 export interface MemoryLookup {
-  getItemVerdict(platform: Platform, id: string): "keep" | "drop" | undefined;
-  getCreatorVerdict(platform: Platform, creatorKey: string): "keep" | "drop" | undefined;
+  getItemVerdict(platform: Platform, id: string): ResolvedVerdict | undefined;
+  getCreatorVerdict(platform: Platform, creatorKey: string): ResolvedVerdict | undefined;
 }
 
 export interface MemoryStore extends MemoryLookup {
-  recordVerdict(item: FeedItem, verdict: "keep" | "drop"): Promise<void>;
+  recordVerdict(item: FeedItem, verdict: ResolvedVerdict): Promise<void>;
   clear(): Promise<void>;
   counts(): { cachedItems: number; learnedCreators: number; droppedTotal: number };
 }
 
+export interface NoveltyLookup {
+  isRedundantRehash(text: string): boolean;
+}
+
+export interface NoveltyMemory extends NoveltyLookup {
+  recordDwelled(text: string): void;
+  clear(): void;
+  size(): number;
+}
+
 export type BatchDecider = (items: FeedItem[]) => Promise<Set<string>>;
+
+export type RuntimeMessage =
+  | { type: "GET_STATUS" }
+  | { type: "CLEAR_CACHE" }
+  | { type: "RECORD_DWELL"; text: string }
+  | { type: "RESOLVE_DEARROW_TITLES"; videoIds: string[] }
+  | { type: "EVALUATE_SSR_ITEMS"; items: FeedItem[] }
+  | { type: "TEST_GRADER"; graderOverride?: GraderSettings };
+
+export interface SieveStatus {
+  sessionFilteredCount: number;
+  cachedItems: number;
+  learnedCreators: number;
+  dwelledCount: number;
+  hnVideos: number;
+  slopChannels: number;
+}
+
+export interface EvaluateSsrItemsResponse {
+  dropped: string[];
+}
+
+export interface ResolveDearrowTitlesResponse {
+  titles: Record<string, string>;
+}
+
+export type TestGraderResponse =
+  | { ok: true; ms: number; droppedProbeSlop: boolean }
+  | { ok: false; ms: number; error: string };
