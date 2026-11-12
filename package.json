@@ -1,0 +1,22 @@
+{
+  "name": "sieve",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-feed caliber filter and UI debloat extension for Firefox.",
+  "scripts": {
+    "seeds": "node scripts/build-seeds.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude 'vendor/**'",
+    "lint:ext": "web-ext lint -s extension"
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "^120.0.4",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5",
+    "web-ext": "^8.4.0"
+  }
+}

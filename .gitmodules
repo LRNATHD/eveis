@@ -1,0 +1,15 @@
+[submodule "vendor/AiSList"]
+	path = vendor/AiSList
+	url = https://github.com/Override92/AiSList.git
+[submodule "vendor/control-panel-for-twitter"]
+	path = vendor/control-panel-for-twitter
+	url = https://github.com/insin/control-panel-for-twitter.git
+[submodule "vendor/slop-filter-for-x"]
+	path = vendor/slop-filter-for-x
+	url = https://github.com/midego1/slop-filter-for-x.git
+[submodule "vendor/FocusTube"]
+	path = vendor/FocusTube
+	url = https://github.com/malekwael229/FocusTube.git
+[submodule "vendor/xrai"]
+	path = vendor/xrai
+	url = https://github.com/phuaky/xrai.git

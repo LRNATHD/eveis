@@ -1,0 +1,136 @@
+html[data-sieve-yt-shorts="1"] ytd-rich-shelf-renderer[is-shorts],
+html[data-sieve-yt-shorts="1"] ytd-rich-shelf-renderer[is-shorts=""],
+html[data-sieve-yt-shorts="1"] ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+html[data-sieve-yt-shorts="1"] ytd-reel-shelf-renderer,
+html[data-sieve-yt-shorts="1"] ytd-item-section-renderer:has(ytd-reel-shelf-renderer),
+html[data-sieve-yt-shorts="1"] grid-shelf-view-model:has(a[href^="/shorts/"]),
+html[data-sieve-yt-shorts="1"] ytd-rich-item-renderer:has(a[href^="/shorts/"]),
+html[data-sieve-yt-shorts="1"] ytd-rich-item-renderer:has([overlay-style="SHORTS"]),
+html[data-sieve-yt-shorts="1"] ytd-video-renderer:has(a[href^="/shorts/"]),
+html[data-sieve-yt-shorts="1"] ytd-video-renderer:has([overlay-style="SHORTS"]),
+html[data-sieve-yt-shorts="1"] ytd-compact-video-renderer:has(a[href^="/shorts/"]),
+html[data-sieve-yt-shorts="1"] ytd-compact-video-renderer:has([overlay-style="SHORTS"]),
+html[data-sieve-yt-shorts="1"] ytd-guide-entry-renderer:has(a[title="Shorts"]),
+html[data-sieve-yt-shorts="1"] ytd-guide-entry-renderer:has(a[href="/shorts"]),
+html[data-sieve-yt-shorts="1"] ytd-mini-guide-entry-renderer:has(a[title="Shorts"]),
+html[data-sieve-yt-shorts="1"] ytd-mini-guide-entry-renderer:has(a[href="/shorts"]),
+html[data-sieve-yt-shorts="1"] ytd-mini-guide-entry-renderer[aria-label="Shorts"],
+html[data-sieve-yt-shorts="1"] yt-tab-shape[tab-title="Shorts"],
+html[data-sieve-yt-shorts="1"] yt-tab-shape:has(a[href*="/shorts"]),
+html[data-sieve-yt-shorts="1"] yt-chip-cloud-chip-renderer:has(a[href^="/shorts"]),
+html[data-sieve-yt-shorts="1"] ytd-guide-entry-renderer:has(a[href^="/playables"]),
+html[data-sieve-yt-shorts="1"] ytd-mini-guide-entry-renderer:has(a[href^="/playables"]),
+html[data-sieve-yt-shorts="1"] ytd-rich-section-renderer:has(a[href^="/playables"]),
+html[data-sieve-yt-shorts="1"] ytd-rich-section-renderer:has([is-mini-game-card-shelf]) {
+  display: none !important;
+}
+
+/* Remove Search with Gemini / Ask YouTube / Voice Search mic, AI summaries, and top feed chip bars */
+html[data-sieve-yt-header="1"] #voice-search-button,
+html[data-sieve-yt-header="1"] ytd-masthead #voice-search-button,
+html[data-sieve-yt-header="1"] ytd-masthead #center > *:not(yt-searchbox):not(ytd-searchbox),
+html[data-sieve-yt-header="1"] button[aria-label="Search with your voice"],
+html[data-sieve-yt-header="1"] [aria-label*="Gemini" i],
+html[data-sieve-yt-header="1"] [title*="Gemini" i],
+html[data-sieve-yt-header="1"] [aria-label*="Ask YouTube" i],
+html[data-sieve-yt-header="1"] [aria-label*="Search with AI" i],
+html[data-sieve-yt-header="1"] yt-button-view-model:has([aria-label="Ask"]),
+html[data-sieve-yt-header="1"] yt-button-view-model:has([aria-label*="Ask YouTube" i]),
+html[data-sieve-yt-header="1"] yt-button-view-model:has([aria-label*="Gemini" i]),
+html[data-sieve-yt-header="1"] ytd-button-renderer:has([aria-label="Ask"]),
+html[data-sieve-yt-header="1"] ytd-button-renderer:has([aria-label*="Gemini" i]),
+html[data-sieve-yt-header="1"] button[aria-label="Ask"],
+html[data-sieve-yt-header="1"] ytd-engagement-panel-section-list-renderer[target-id*="ask" i],
+html[data-sieve-yt-header="1"] ytd-talk-to-recs-flow-renderer,
+html[data-sieve-yt-header="1"] .ytdTalkToRecsFlowRendererFlowContent,
+html[data-sieve-yt-header="1"] ytd-expandable-metadata-renderer[has-video-summary],
+html[data-sieve-yt-header="1"] ytd-feed-filter-chip-bar-renderer,
+html[data-sieve-yt-header="1"] ytd-rich-grid-renderer > #header,
+html[data-sieve-yt-header="1"] #chips-wrapper,
+html[data-sieve-yt-header="1"] yt-related-chip-cloud-renderer,
+html[data-sieve-yt-header="1"] [data-sieve-yt-ask="1"] {
+  display: none !important;
+}
+
+/* Fix tall frosted-glass header on scroll when chip bar is hidden */
+html[data-sieve-yt-header="1"] #frosted-glass,
+html[data-sieve-yt-header="1"] #frosted-glass.with-chipbar {
+  height: var(--ytd-toolbar-height, 56px) !important;
+  background: var(--yt-spec-base-background) !important;
+}
+
+html[data-sieve-yt-header="1"] ytd-masthead[frosted-glass-mode]:not([dark]):not([theater]) #background {
+  background: var(--yt-spec-base-background) !important;
+}
+
+/* Dynamically switch masthead to dark mode whenever watching in Theater / Landscape / Fullscreen mode */
+html[data-sieve-yt-theater="1"] #frosted-glass,
+html[data-sieve-yt-theater="1"] #frosted-glass.with-chipbar,
+html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) #frosted-glass,
+html[data-sieve-yt-header="1"] ytd-masthead:is([dark], [theater]),
+html[data-sieve-yt-header="1"] ytd-masthead:is([dark], [theater]) #background,
+html[data-sieve-yt-theater="1"] ytd-masthead,
+html[data-sieve-yt-theater="1"] ytd-masthead #background {
+  background: #0f0f0f !important;
+  --yt-spec-base-background: #0f0f0f !important;
+  --yt-spec-text-primary: #f1f1f1 !important;
+  --yt-spec-text-secondary: #aaaaaa !important;
+  --yt-spec-icon-active-other: #f1f1f1 !important;
+  --yt-spec-icon-inactive: #f1f1f1 !important;
+  --yt-spec-10-percent-layer: rgba(255, 255, 255, 0.16) !important;
+  color: #f1f1f1 !important;
+}
+
+html[data-sieve-yt-theater="1"] ytd-masthead :is(#guide-icon, #logo-icon, yt-icon, svg),
+html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead :is(#guide-icon, #logo-icon, yt-icon, svg) {
+  color: #f1f1f1 !important;
+}
+
+html[data-sieve-yt-theater="1"] ytd-masthead :is(.ytSearchboxComponentInputBox, #search-form #container.ytd-searchbox),
+html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead :is(.ytSearchboxComponentInputBox, #search-form #container.ytd-searchbox) {
+  background: #121212 !important;
+  border-color: #303030 !important;
+  color: #f1f1f1 !important;
+}
+
+html[data-sieve-yt-theater="1"] ytd-masthead :is(input.ytSearchboxComponentInput, #search-input input),
+html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead :is(input.ytSearchboxComponentInput, #search-input input) {
+  color: #f1f1f1 !important;
+}
+
+html[data-sieve-yt-theater="1"] ytd-masthead .ytSearchboxComponentSearchButton,
+html[data-sieve-yt-header="1"] ytd-app:has(ytd-watch-flexy:is([theater], [full-bleed-player], [fullscreen]):not([hidden])) ytd-masthead .ytSearchboxComponentSearchButton {
+  background: #222222 !important;
+  border-color: #303030 !important;
+  color: #f1f1f1 !important;
+}
+
+/* Place single search bar immediately to the right of the YouTube Premium logo */
+html[data-sieve-yt-header="1"] ytd-masthead #container {
+  justify-content: flex-start !important;
+  gap: 18px !important;
+}
+
+html[data-sieve-yt-header="1"] ytd-masthead #start {
+  flex: 0 0 auto !important;
+}
+
+html[data-sieve-yt-header="1"] ytd-masthead #center {
+  flex: 0 1 480px !important;
+  margin: 0 auto 0 0 !important;
+  justify-content: flex-start !important;
+}
+
+html[data-sieve-yt-header="1"] ytd-masthead #end {
+  margin-left: auto !important;
+}
+
+/* Reflow grid rows seamlessly if any SSR card is hidden */
+ytd-rich-grid-row,
+ytd-rich-grid-row > #contents {
+  display: contents !important;
+}
+
+[data-sieve-yt-dropped="1"] {
+  display: none !important;
+}

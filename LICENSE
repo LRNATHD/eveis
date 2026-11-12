@@ -1,0 +1,69 @@
+=============================================================================
+Sieve original source code is licensed under the MIT License
+=============================================================================
+
+MIT License
+
+Copyright (c) 2026 Teddy Warner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+=============================================================================
+Upstream Submodules, Datasets, and Attributions
+=============================================================================
+
+1. HackerTube Dataset (https://hackertube.org/data)
+   Created by Andrej Karpathy, derived from open-index/hacker-news
+   (https://huggingface.co/datasets/open-index/hacker-news).
+   Licensed under Open Data Commons Attribution License (ODC-By 1.0):
+   https://opendatacommons.org/licenses/by/1-0/
+   Modified: Extracted canonical YouTube video IDs and channel names into
+   extension/assets/seeds/hn-videos.txt and hn-channels.txt.
+
+2. AiSList (vendor/AiSList - https://github.com/Override92/AiSList)
+   Created by Override92 and contributors.
+   Licensed under Creative Commons Attribution-NonCommercial 4.0 International
+   (CC BY-NC 4.0): https://creativecommons.org/licenses/by-nc/4.0/
+   Non-commercial use only. Provided as-is without warranties.
+   Modified: Normalized channel handles and IDs into
+   extension/assets/seeds/slop-channels.txt.
+
+3. DeArrow Community Database (https://github.com/ajayyy/DeArrow)
+   Created by Ajay Ramachandran and DeArrow contributors.
+   Data licensed under Creative Commons Attribution-ShareAlike 4.0 International
+   (CC BY-SA 4.0): https://creativecommons.org/licenses/by-sa/4.0/
+   Queried via k-anonymous 4-character SHA-256 hash prefixes against the public
+   read-only mirror (https://dearrow.minibomba.pro/sbserver/).
+
+4. Control Panel for Twitter (vendor/control-panel-for-twitter -
+   https://github.com/insin/control-panel-for-twitter)
+   Copyright (c) Jonathan Buchanan (insin). Licensed under the MIT License.
+
+5. Slop Filter for X (vendor/slop-filter-for-x -
+   https://github.com/midego1/slop-filter-for-x)
+   Licensed under the MIT License.
+
+6. FocusTube (vendor/FocusTube - https://github.com/malekwael229/FocusTube)
+   Copyright (c) Malek Wael. Licensed under the MIT License.
+
+7. xrai / rai (vendor/xrai - https://github.com/phuaky/xrai)
+   Licensed under the MIT License.
+
+8. JetBrains Mono (https://www.jetbrains.com/lp/mono/)
+   Copyright (c) JetBrains s.r.o. Licensed under the SIL Open Font License 1.1.

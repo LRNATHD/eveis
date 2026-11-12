@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sieve settings</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body class="options">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">sieve</span>
+      <span class="brand-ctx">settings</span>
+    </div>
+    <span class="status-note" id="save-indicator">saved locally</span>
+  </header>
+
+  <div class="card">
+    <label class="row">
+      <span>
+        <span class="row-label">pass followed and subscribed creators</span>
+        <span class="row-sub">skip filtering for accounts you already follow</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="pass-followed">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </span>
+    </label>
+    <label class="row">
+      <span>
+        <span class="row-label">dwell novelty memory (48h)</span>
+        <span class="row-sub">drop unfollowed rehashes of stories you already read</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="novelty-filter">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </span>
+    </label>
+  </div>
+
+  <h2 class="section-title">tier 2 grader</h2>
+  <div class="card">
+    <div class="grid-2">
+      <div class="field">
+        <label for="grader-mode">mode</label>
+        <select id="grader-mode">
+          <option value="local">local (ollama / mlx)</option>
+          <option value="api">api (openai-compatible)</option>
+          <option value="off">off (tiers 0 &amp; 1 only)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="grader-hold">stream budget (ms)</label>
+        <input type="number" id="grader-hold" min="100" max="3000" step="50">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="grader-endpoint">chat completions endpoint</label>
+      <input type="url" id="grader-endpoint" spellcheck="false" autocomplete="off">
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="grader-model">model</label>
+        <input type="text" id="grader-model" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="grader-key">api key (stored locally, optional for local)</label>
+        <input type="password" id="grader-key" spellcheck="false" autocomplete="off" placeholder="sk-...">
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <button type="button" class="btn" id="test-grader">test connection</button>
+      <span class="status-note" id="test-result"></span>
+    </div>
+  </div>
+
+  <h2 class="section-title">personal taste rubric</h2>
+  <div class="card">
+    <div class="field">
+      <label for="grader-rubric">instructions sent to tier 2 batch grader</label>
+      <textarea id="grader-rubric" rows="6"></textarea>
+    </div>
+    <div class="actions-row">
+      <button type="button" class="btn" id="reset-rubric">reset to default</button>
+    </div>
+  </div>
+
+  <h2 class="section-title">creator overrides</h2>
+  <div class="card">
+    <div class="grid-2">
+      <div class="field">
+        <label for="allow-handles">always keep (@handle or UC id, one per line)</label>
+        <textarea id="allow-handles" rows="5" spellcheck="false"></textarea>
+      </div>
+      <div class="field">
+        <label for="block-handles">always drop (@handle or UC id, one per line)</label>
+        <textarea id="block-handles" rows="5" spellcheck="false"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-title">local memory &amp; seeds</h2>
+  <div class="card">
+    <div class="actions-row" style="justify-content: space-between;">
+      <span class="status-note" id="memory-stats">loading stats...</span>
+      <button type="button" class="btn" id="clear-cache">clear verdict cache</button>
+    </div>
+  </div>
+
+  <script src="../dist/options.js"></script>
+</body>
+</html>

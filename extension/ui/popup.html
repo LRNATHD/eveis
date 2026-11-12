@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sieve</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body class="popup">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">sieve</span>
+      <span class="brand-ctx" id="active-site">all sites</span>
+    </div>
+    <label class="switch" title="Enable Sieve">
+      <input type="checkbox" id="master-enabled">
+      <span class="switch-track"><span class="switch-thumb"></span></span>
+    </label>
+  </header>
+
+  <div id="primary-mount"></div>
+
+  <details class="more" id="other-platforms" hidden>
+    <summary>
+      <span id="other-summary-label">all sites &amp; universal</span>
+      <span id="other-indicator">+</span>
+    </summary>
+    <div id="secondary-mount"></div>
+  </details>
+
+  <footer class="footer">
+    <span id="status-line">loading...</span>
+    <button type="button" class="link-btn" id="open-options">settings</button>
+  </footer>
+
+  <script src="../dist/popup.js"></script>
+</body>
+</html>

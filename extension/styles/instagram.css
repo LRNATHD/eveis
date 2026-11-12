@@ -1,0 +1,15 @@
+html[data-sieve-ig-clutter="1"] a[href*="threads.net"],
+html[data-sieve-ig-clutter="1"] a[href*="threads.com"],
+html[data-sieve-ig-clutter="1"] div:has(> a[href*="threads.net"]),
+html[data-sieve-ig-clutter="1"] div:has(> a[href*="threads.com"]),
+html[data-sieve-ig-clutter="1"]
+  main
+  div:not(:has(article)):not(:has([role="feed"])):has(> div a[href*="/explore/people"]),
+html[data-sieve-ig-clutter="1"] [data-sieve-ig-right-rail="1"] {
+  display: none !important;
+}
+
+article[data-sieve-hidden="1"],
+[data-sieve-ig-hidden="1"] {
+  display: none !important;
+}

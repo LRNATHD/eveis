@@ -1,0 +1,52 @@
+/* Post-Only Mode: hide feed containers when enabled */
+html[data-sieve-tt-block="1"] #main-content-homepage_hot,
+html[data-sieve-tt-block="1"] #main-content-homepage_follow,
+html[data-sieve-tt-block="1"] #main-content-explore_page,
+html[data-sieve-tt-block="1"] #main-content-live_page,
+html[data-sieve-tt-block="1"] #main-content-friends_page,
+html[data-sieve-tt-block="1"] [data-e2e="recommend-list-item-container"],
+html[data-sieve-tt-block="1"] [data-e2e="explore-item-list"] {
+  display: none !important;
+}
+
+/*
+  Chrome debloat: NEVER hide inner nav links alone (which leaves 48px empty black row wrappers).
+  Only collapse the outermost list-item wrapper (li or direct flex-column child marked [data-sieve-tt-hidden="1"])
+  so remaining sidebar rows compress upward with zero gaps.
+*/
+html[data-sieve-tt-chrome="1"] ul > li:has([data-e2e="nav-live"]),
+html[data-sieve-tt-chrome="1"] ul > li:has([data-e2e="nav-explore"]),
+html[data-sieve-tt-chrome="1"] ul > li:has([data-e2e="nav-friends"]),
+html[data-sieve-tt-chrome="1"] ul > li:has(a[href*="/shortdrama"]),
+html[data-sieve-tt-chrome="1"] ul > li:has(a[href*="/shop"]),
+html[data-sieve-tt-chrome="1"] [data-e2e="nav-following-accounts"],
+html[data-sieve-tt-chrome="1"] [data-e2e="following-accounts"],
+html[data-sieve-tt-chrome="1"] [data-e2e="suggest-accounts"],
+html[data-sieve-tt-chrome="1"] [class*="-DivUserContainer"],
+html[data-sieve-tt-chrome="1"] [class*="-DivDiscoverContainer"],
+html[data-sieve-tt-chrome="1"] [class*="-DivFooterContainer"],
+html[data-sieve-tt-chrome="1"] [data-e2e="legal-link"],
+html[data-sieve-tt-chrome="1"] [data-e2e="top-recharge-entrance"],
+html[data-sieve-tt-chrome="1"] [data-e2e="recharge-entrance"],
+html[data-sieve-tt-chrome="1"] [data-e2e="live-studio-entrance"],
+html[data-sieve-tt-chrome="1"] [data-e2e="top-download-entrance"],
+html[data-sieve-tt-chrome="1"] [class*="-DivBottomContainer"],
+html[data-sieve-tt-chrome="1"] [class*="-DivPromotionContainer"],
+html[data-sieve-tt-chrome="1"] header a[href*="/coin"],
+html[data-sieve-tt-chrome="1"] header *:has(> a[href*="/coin"]),
+html[data-sieve-tt-chrome="1"] [data-sieve-tt-hidden="1"] {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+html[data-sieve-tt-light="1"] {
+  color-scheme: light !important;
+}
+
+[data-sieve-tt-dropped="1"] {
+  display: none !important;
+}
