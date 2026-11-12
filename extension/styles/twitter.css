@@ -47,8 +47,7 @@ html[data-sieve-x-sidebar="1"] [data-testid="eventHero"],
 html[data-sieve-x-sidebar="1"] [data-testid="eventHero"] + div,
 html[data-sieve-x-sidebar="1"] [data-testid="GrokDrawer"],
 html[data-sieve-x-sidebar="1"] [data-testid="xchatEmbedDrawer"],
-html[data-sieve-x-sidebar="1"] [data-testid="chat-drawer-root"],
-html[data-sieve-x-sidebar="1"] [data-testid="cellInnerDiv"]:has([data-testid="placementTracking"]) {
+html[data-sieve-x-sidebar="1"] [data-testid="chat-drawer-root"] {
   display: none !important;
 }
 

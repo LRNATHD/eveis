@@ -106,7 +106,8 @@ describe("manifest, seeds, UI polish, and copy hygiene", () => {
     expect(xCss).toContain("/creators/studio");
     expect(xCss).toContain('nav[aria-label="Footer"]');
     expect(xCss).toContain('form[role="search"]');
-    expect(xCss).toContain('eventHero');
+    expect(xCss).toContain("eventHero");
+    expect(xCss).not.toContain('[data-testid="cellInnerDiv"]:has([data-testid="placementTracking"])');
 
     const igCss = readFileSync(path.join(root, "extension/styles/instagram.css"), "utf8");
     expect(igCss).toContain("/explore/people");

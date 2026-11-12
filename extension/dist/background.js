@@ -2363,7 +2363,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     "https://www.tiktok.com/api/recommend/item_list/*",
     "https://www.tiktok.com/api/post/item_list/*"
   ];
-  var TWITTER_TIMELINE_RE = /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|TweetDetail|SearchTimeline|ExplorePage|GenericTimelineById|ExploreSidebar|UserTweets|UserTweetsAndReplies|UserMedia|HighlightsTweets)/;
+  var TWITTER_TIMELINE_RE = /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|ExplorePage|GenericTimelineById|ExploreSidebar|SearchTimeline)/;
   function shouldFilterRequest(details) {
     if (!config.enabled) return false;
     let parsed;

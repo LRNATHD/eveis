@@ -98,7 +98,7 @@ const INTERCEPT_URLS = [
 ];
 
 const TWITTER_TIMELINE_RE =
-  /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|TweetDetail|SearchTimeline|ExplorePage|GenericTimelineById|ExploreSidebar|UserTweets|UserTweetsAndReplies|UserMedia|HighlightsTweets)/;
+  /\/i\/api\/graphql\/[^/]+\/(HomeTimeline|HomeLatestTimeline|ExplorePage|GenericTimelineById|ExploreSidebar|SearchTimeline)/;
 
 function shouldFilterRequest(details: browser.webRequest._OnBeforeRequestDetails): boolean {
   if (!config.enabled) return false;
