@@ -28,28 +28,29 @@ function walkTextFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-describe("manifest, seeds, UI polish, and copy hygiene", () => {
-  it("contains valid Firefox MV2 manifest with document_start scripts", () => {
+describe("Chrome MV3 manifest, seeds, evil UI polish, and copy hygiene", () => {
+  it("contains valid Chrome MV3 manifest with document_start scripts", () => {
     const manifestPath = path.join(root, "extension", "manifest.json");
     expect(existsSync(manifestPath)).toBe(true);
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       manifest_version: number;
-      browser_specific_settings?: { gecko?: { id?: string } };
-      background?: { scripts?: string[] };
-      browser_action?: { default_popup?: string };
+      name: string;
+      background?: { service_worker?: string };
+      action?: { default_popup?: string };
       options_ui?: { page?: string };
       content_scripts?: Array<{ run_at?: string; js?: string[]; css?: string[] }>;
     };
 
-    expect(manifest.manifest_version).toBe(2);
-    expect(manifest.browser_specific_settings?.gecko?.id).toBe("sieve@twarner491.github.io");
-    expect(manifest.browser_action?.default_popup).toBe("ui/popup.html");
+    expect(manifest.manifest_version).toBe(3);
+    expect(manifest.name).toBe("Eveis");
+    expect(manifest.background?.service_worker).toBe("dist/background.js");
+    expect(manifest.action?.default_popup).toBe("ui/popup.html");
     expect(manifest.options_ui?.page).toBe("ui/options.html");
     expect(manifest.content_scripts?.length).toBe(4);
 
     const referencedPaths = [
-      ...(manifest.background?.scripts ?? []),
-      manifest.browser_action?.default_popup ?? "",
+      manifest.background?.service_worker ?? "",
+      manifest.action?.default_popup ?? "",
       manifest.options_ui?.page ?? "",
       ...(manifest.content_scripts ?? []).flatMap((cs) => [...(cs.js ?? []), ...(cs.css ?? [])]),
     ].filter(Boolean);
@@ -79,10 +80,10 @@ describe("manifest, seeds, UI polish, and copy hygiene", () => {
     expect(fontStat.size).toBeGreaterThan(20000);
   });
 
-  it("enforces JetBrains Mono only and better-ui CSS rules in theme.css", () => {
+  it("enforces JetBrains Mono only and evil UI rules in theme.css", () => {
     const css = readFileSync(path.join(root, "extension/ui/theme.css"), "utf8");
     expect(css).toContain("JetBrains Mono");
-    expect(css).not.toContain("Crimson Pro");
+    expect(css).toContain("#ff1e42");
     expect(css).not.toMatch(/transition\s*:\s*all\b/);
     expect(css).toContain("@media (hover: hover)");
     expect(css).toContain("prefers-reduced-motion");
@@ -90,46 +91,27 @@ describe("manifest, seeds, UI polish, and copy hygiene", () => {
     expect(css).toContain("align-items: center");
   });
 
-  it("covers YouTube, Twitter, Instagram, and TikTok zero-bloat UI rules", () => {
+  it("covers YouTube, Twitter, Instagram, and TikTok post-render UI bloat rules", () => {
     const ytCss = readFileSync(path.join(root, "extension/styles/youtube.css"), "utf8");
     const ytContent = readFileSync(path.join(root, "src/content/youtube.ts"), "utf8");
-    expect(ytCss).toContain("voice-search-button");
-    expect(ytCss).toContain("ytd-feed-filter-chip-bar-renderer");
-    expect(ytCss).toContain("#frosted-glass");
-    expect(ytCss).toContain("data-sieve-yt-theater");
-    expect(ytCss).not.toContain(":has(ytd-watch-flexy");
-    expect(ytCss).not.toContain("ytd-masthead:is([dark]");
-    expect(ytCss).toContain("Gemini");
-    expect(ytCss).not.toContain('html[data-sieve-yt-header="1"] [title*="Gemini" i]');
-    expect(ytCss).not.toContain('html[data-sieve-yt-header="1"] [aria-label*="Gemini" i]');
-    expect(ytCss).toContain('html[data-sieve-yt-on="1"] ytd-rich-grid-row');
-    expect(ytCss).not.toContain("order: -1");
-    expect(ytContent).toContain("full-bleed-player");
-    expect(ytContent).toContain("yt-navigate-start");
-    expect(ytContent).not.toContain('setAttribute("dark"');
-
-    const iconSvg = readFileSync(path.join(root, "extension/icons/icon.svg"), "utf8");
-    expect(iconSvg).not.toContain("context-fill #");
+    expect(ytCss).toContain("eveis-yt-shorts");
+    expect(ytCss).toContain("ytd-masthead");
+    expect(ytCss).not.toContain("#eveis-evil-hud");
+    expect(ytContent).toContain("hypeTitle");
+    expect(ytContent).toContain("/shorts/");
 
     const xCss = readFileSync(path.join(root, "extension/styles/twitter.css"), "utf8");
-    expect(xCss).toContain('[href^="/i/premium"]');
-    expect(xCss).toContain('[href="/i/money"]');
-    expect(xCss).toContain("/creators/studio");
-    expect(xCss).toContain('nav[aria-label="Footer"]');
-    expect(xCss).toContain('form[role="search"]');
-    expect(xCss).toContain("eventHero");
-    expect(xCss).not.toContain('[data-testid="cellInnerDiv"]:has([data-testid="placementTracking"])');
+    expect(xCss).toContain("eveis-x-dropped");
 
     const igCss = readFileSync(path.join(root, "extension/styles/instagram.css"), "utf8");
-    expect(igCss).toContain("/explore/people");
-    expect(igCss).toContain("data-sieve-ig-right-rail");
+    expect(igCss).toContain("eveis-ig-on");
 
     const ttCss = readFileSync(path.join(root, "extension/styles/tiktok.css"), "utf8");
-    expect(ttCss).toContain("recharge-entrance");
-    expect(ttCss).toContain("download-entrance");
-    expect(ttCss).toContain("shortdrama");
+    expect(ttCss).toContain("eveis-tt-dropped");
+    expect(ttCss).toContain("eveis-tt-dark");
+
     expect(detectPlatformFromUrl("https://example.org")).toBeNull();
-    expect(detectPlatformFromUrl("about:debugging#/runtime/this-firefox")).toBeNull();
+    expect(detectPlatformFromUrl("chrome://extensions")).toBeNull();
     expect(detectPlatformFromUrl("https://www.youtube.com/watch?v=IS5ycm7VfXg")).toBe("youtube");
     expect(detectPlatformFromUrl("https://x.com/explore")).toBe("x");
     expect(detectPlatformFromUrl("https://www.instagram.com/reels/")).toBe("instagram");

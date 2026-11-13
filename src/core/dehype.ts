@@ -274,3 +274,39 @@ export function midFrameThumbUrl(url: string, videoId?: string): string {
   if (!resolvedId) return url;
   return `https://i.ytimg.com/vi/${resolvedId}/hq2.jpg`;
 }
+
+const HYPE_SUFFIXES = [
+  " 🚨 (GONE WRONG!!)",
+  " 😱 WAIT TILL THE END!!",
+  " 🔥 NOBODY TALKS ABOUT THIS!!",
+  " 💀 IT'S OVER...",
+  " 🤯 EXPOSED!!",
+];
+
+export function hypeTitle(title: string): string {
+  if (!title) return title;
+  const trimmed = title.trim();
+  if (!trimmed) return title;
+  const shouted = trimmed
+    .split(/(\s+)/)
+    .map((part) => (isUrlOrHandle(part) ? part : part.toUpperCase()))
+    .join("")
+    .replace(/!+/g, "!!!")
+    .replace(/\?+/g, "?!");
+
+  let hash = 0;
+  for (let i = 0; i < trimmed.length; i++) {
+    hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
+  }
+  const suffix = HYPE_SUFFIXES[hash % HYPE_SUFFIXES.length] ?? " 🚨!!";
+  if (/[🚨😱🔥💀🤯]/.test(shouted)) return shouted;
+  return `${shouted}${suffix}`;
+}
+
+export function clickbaitThumbUrl(url: string, videoId?: string): string {
+  if (!url) return url;
+  const match = YT_THUMB_RE.exec(url);
+  const resolvedId = match?.[1] ?? (videoId && /^[A-Za-z0-9_-]{11}$/.test(videoId) ? videoId : "");
+  if (!resolvedId) return url;
+  return `https://i.ytimg.com/vi/${resolvedId}/hqdefault.jpg`;
+}

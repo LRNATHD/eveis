@@ -1,14 +1,42 @@
-html[data-sieve-ig-clutter="1"] :is(nav, [role="navigation"]) a[href*="threads.net"],
-html[data-sieve-ig-clutter="1"] :is(nav, [role="navigation"]) a[href*="threads.com"],
-html[data-sieve-ig-clutter="1"] :is(nav, [role="navigation"]) div:has(> a[href*="threads.net"]),
-html[data-sieve-ig-clutter="1"] :is(nav, [role="navigation"]) div:has(> a[href*="threads.com"]),
-html[data-sieve-ig-clutter="1"]
-  main
-  div:not(:has(article)):not(:has([role="feed"])):has(> div a[href*="/explore/people"]),
-html[data-sieve-ig-clutter="1"] [data-sieve-ig-right-rail="1"] {
+/* Instagram: Fully Locked to Reels (Sidebar Nuked) + 4x Speed + Nasty Typography & Distortion */
+
+/* Hide navigation bars and sidebar containers so you can't escape Reels */
+html[data-eveis-ig-on="1"] nav,
+html[data-eveis-ig-on="1"] [role="navigation"],
+html[data-eveis-ig-on="1"] [data-eveis-ig-sidebar="1"] {
   display: none !important;
 }
 
-html[data-sieve-ig-on="1"] article[data-sieve-hidden="1"] {
-  display: none !important;
+/* Heavy page & video distortion */
+html[data-eveis-ig-on="1"] main[role="main"],
+html[data-eveis-ig-on="1"] main {
+  padding: 40px 8px 12px 64px !important;
+  transform: skewX(-2.2deg) rotate(-0.5deg);
+}
+
+html[data-eveis-ig-on="1"] video {
+  transform: rotate(-2.8deg) skewX(2.4deg) scale(1.06, 0.88);
+  border-radius: 28px !important;
+}
+
+html[data-eveis-ig-on="1"] section svg,
+html[data-eveis-ig-on="1"] [role="button"] svg {
+  transform: scale(1.6) rotate(8deg);
+}
+
+/* Strip clean typography/CSS from text so it looks raw & downright nasty */
+html[data-eveis-ig-on="1"] main h1,
+html[data-eveis-ig-on="1"] main span,
+html[data-eveis-ig-on="1"] main a,
+html[data-eveis-ig-on="1"] main div[dir="auto"] {
+  font-family: "Times New Roman", Times, serif !important;
+  font-size: 19px !important;
+  font-weight: 400 !important;
+  line-height: 1.02 !important;
+  letter-spacing: -0.04em !important;
+  text-decoration: underline !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  -webkit-line-clamp: unset !important;
+  max-height: none !important;
 }

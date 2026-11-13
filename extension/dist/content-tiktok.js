@@ -1,237 +1,81 @@
 "use strict";
 (() => {
   // src/core/dehype.ts
-  var PRESERVED_ACRONYMS = /* @__PURE__ */ new Set([
-    "2D",
-    "3D",
-    "AI",
-    "API",
-    "ARM",
-    "ASIC",
-    "CAD",
-    "CAM",
-    "CEO",
-    "CERN",
-    "CGI",
-    "CLI",
-    "CNC",
-    "CPU",
-    "CRT",
-    "CSS",
-    "CTO",
-    "DAC",
-    "DIY",
-    "DMA",
-    "DNS",
-    "DSP",
-    "EDA",
-    "EEG",
-    "EMC",
-    "EMI",
-    "ESP",
-    "EU",
-    "FM",
-    "FPGA",
-    "GCC",
-    "GLSL",
-    "GPIO",
-    "GPS",
-    "GPU",
-    "GUI",
-    "HDL",
-    "HDMI",
-    "HF",
-    "HTML",
-    "HTTP",
-    "HTTPS",
-    "I2C",
-    "IC",
-    "IDE",
-    "IOT",
-    "IP",
-    "IR",
-    "ISA",
-    "JIT",
-    "JPL",
-    "JS",
-    "JSON",
-    "LAN",
-    "LASER",
-    "LCD",
-    "LED",
-    "LIDAR",
-    "LLM",
-    "LNA",
-    "LORA",
-    "MAC",
-    "MCU",
-    "MEMS",
-    "MIDI",
-    "MIT",
-    "ML",
-    "MLX",
-    "MOSFET",
-    "MRI",
-    "NASA",
-    "NFC",
-    "NLP",
-    "NVME",
-    "NYC",
-    "OLED",
-    "OS",
-    "PCB",
-    "PCI",
-    "PCIE",
-    "PDF",
-    "PID",
-    "PLL",
-    "PWM",
-    "QFP",
-    "QR",
-    "RADAR",
-    "RAM",
-    "RF",
-    "RGB",
-    "RISC",
-    "RL",
-    "ROM",
-    "ROS",
-    "RTOS",
-    "RUST",
-    "SBC",
-    "SDK",
-    "SDR",
-    "SF",
-    "SIMD",
-    "SLA",
-    "SLS",
-    "SMD",
-    "SMT",
-    "SOC",
-    "SPI",
-    "SQL",
-    "SRAM",
-    "SSD",
-    "SSH",
-    "SVG",
-    "SWD",
-    "TCP",
-    "TLA",
-    "TLS",
-    "TPU",
-    "TS",
-    "TTL",
-    "TV",
-    "UART",
-    "UDP",
-    "UHF",
-    "UI",
-    "UK",
-    "URL",
-    "US",
-    "USA",
-    "USB",
-    "USB-C",
-    "UV",
-    "UX",
-    "VCO",
-    "VFD",
-    "VFX",
-    "VGA",
-    "VHF",
-    "VHS",
-    "VLSI",
-    "VM",
-    "VPN",
-    "VR",
-    "WASM",
-    "WIFI",
-    "X86",
-    "XML"
-  ]);
-  function stripPunct(token) {
-    const match = /^([^A-Za-z0-9]*)([A-Za-z0-9][A-Za-z0-9'-]*[A-Za-z0-9]|[A-Za-z0-9])([^A-Za-z0-9]*)$/.exec(
-      token
-    );
-    if (!match) return { lead: "", core: token, trail: "" };
-    return { lead: match[1] ?? "", core: match[2] ?? token, trail: match[3] ?? "" };
-  }
-  function isAcronym(core) {
-    return PRESERVED_ACRONYMS.has(core.toUpperCase());
-  }
-  function isShoutWord(core) {
-    if (isAcronym(core)) return false;
-    const letters = core.replace(/[^A-Za-z]/g, "");
-    return letters.length >= 2 && letters === letters.toUpperCase();
-  }
-  function capitalizeWord(word) {
-    return word.replace(/[A-Za-z]/, (ch) => ch.toUpperCase());
-  }
   function isUrlOrHandle(part) {
     return /^(?:https?:\/\/|www\.|@)/i.test(part.trim()) || part.includes("_");
   }
-  function calmTitle(title) {
+  var HYPE_SUFFIXES = [
+    " \u{1F6A8} (GONE WRONG!!)",
+    " \u{1F631} WAIT TILL THE END!!",
+    " \u{1F525} NOBODY TALKS ABOUT THIS!!",
+    " \u{1F480} IT'S OVER...",
+    " \u{1F92F} EXPOSED!!"
+  ];
+  function hypeTitle(title) {
     if (!title) return title;
-    const collapsed = title.replace(/!{2,}/g, "!").replace(/\?{2,}/g, "?");
-    const parts = collapsed.split(/(\s+)/);
-    const wordIndices = [];
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (!part || /^\s+$/.test(part) || isUrlOrHandle(part)) continue;
-      const { core } = stripPunct(part);
-      const letters = core.replace(/[^A-Za-z]/g, "");
-      if (letters.length >= 2 && !isAcronym(core)) {
-        wordIndices.push(i);
-      }
+    const trimmed = title.trim();
+    if (!trimmed) return title;
+    const shouted = trimmed.split(/(\s+)/).map((part) => isUrlOrHandle(part) ? part : part.toUpperCase()).join("").replace(/!+/g, "!!!").replace(/\?+/g, "?!");
+    let hash = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      hash = hash * 31 + trimmed.charCodeAt(i) >>> 0;
     }
-    if (wordIndices.length === 0) return collapsed;
-    const shoutCount = wordIndices.filter((idx) => isShoutWord(stripPunct(parts[idx]).core)).length;
-    const fullShout = shoutCount / wordIndices.length >= 0.75;
-    if (fullShout) {
-      let sentenceStart = true;
-      return parts.map((part) => {
-        if (!part || /^\s+$/.test(part) || isUrlOrHandle(part)) return part;
-        const { lead, core, trail } = stripPunct(part);
-        const letters = core.replace(/[^A-Za-z]/g, "");
-        if (!letters) return part;
-        let nextCore;
-        if (isAcronym(core)) {
-          nextCore = core.toUpperCase();
-        } else {
-          const lower = core.toLowerCase();
-          nextCore = sentenceStart ? capitalizeWord(lower) : lower;
-        }
-        sentenceStart = /[:.!?]$/.test(trail);
-        return `${lead}${nextCore}${trail}`;
-      }).join("");
-    }
-    const nonSpaceIndices = [];
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i] && !/^\s+$/.test(parts[i])) nonSpaceIndices.push(i);
-    }
-    let runStart = -1;
-    const lowerPositions = /* @__PURE__ */ new Set();
-    for (let k = 0; k <= nonSpaceIndices.length; k++) {
-      const partIdx = nonSpaceIndices[k];
-      const partVal = partIdx !== void 0 ? parts[partIdx] : "";
-      const shouting = partIdx !== void 0 && !isUrlOrHandle(partVal) && isShoutWord(stripPunct(partVal).core);
-      if (shouting) {
-        if (runStart === -1) runStart = k;
-      } else if (runStart !== -1) {
-        if (k - runStart >= 2) {
-          for (let j = runStart; j < k; j++) lowerPositions.add(nonSpaceIndices[j]);
-        }
-        runStart = -1;
-      }
-    }
-    if (lowerPositions.size === 0) return collapsed;
-    return parts.map((part, idx) => {
-      if (!lowerPositions.has(idx)) return part;
-      const { lead, core, trail } = stripPunct(part);
-      const lowered = core.toLowerCase();
-      return `${lead}${idx === nonSpaceIndices[0] ? capitalizeWord(lowered) : lowered}${trail}`;
-    }).join("");
+    const suffix = HYPE_SUFFIXES[hash % HYPE_SUFFIXES.length] ?? " \u{1F6A8}!!";
+    if (/[🚨😱🔥💀🤯]/.test(shouted)) return shouted;
+    return `${shouted}${suffix}`;
   }
+
+  // src/browser-api.ts
+  function getExtApi() {
+    const g = globalThis;
+    if (g.chrome?.runtime) return g.chrome;
+    if (g.browser?.runtime) return g.browser;
+    throw new Error("Extension runtime API unavailable");
+  }
+  var ext = {
+    getURL(path) {
+      return getExtApi().runtime.getURL(path);
+    },
+    async storageGet(key) {
+      return getExtApi().storage.local.get(key);
+    },
+    async storageSet(items) {
+      return getExtApi().storage.local.set(items);
+    },
+    onStorageChanged(cb) {
+      getExtApi().storage.onChanged.addListener(cb);
+    },
+    async sendMessage(message) {
+      return getExtApi().runtime.sendMessage(message);
+    },
+    onMessage(handler) {
+      getExtApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        const maybePromise = handler(message);
+        if (!maybePromise) return false;
+        void maybePromise.then(sendResponse).catch(() => sendResponse(void 0));
+        return true;
+      });
+    },
+    async queryActiveTabUrl() {
+      const tabs = await getExtApi().tabs.query({ active: true, currentWindow: true });
+      return tabs[0]?.url;
+    },
+    async queryAllTabs() {
+      return getExtApi().tabs.query({});
+    },
+    async closeTab(tabId) {
+      return getExtApi().tabs.remove(tabId);
+    },
+    onTabCreated(cb) {
+      getExtApi().tabs.onCreated.addListener(cb);
+    },
+    onTabUpdated(cb) {
+      getExtApi().tabs.onUpdated.addListener(cb);
+    },
+    async openOptionsPage() {
+      return getExtApi().runtime.openOptionsPage();
+    }
+  };
 
   // src/types.ts
   function isRecord(v) {
@@ -240,15 +84,15 @@
 
   // src/defaults.ts
   var SCHEMA_VERSION = 1;
-  var DEFAULT_RUBRIC = `Evaluate each item across four axes:
-1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
-2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
-3. Substance: real signal, art, humor, or insight vs padded filler or recycled sludge.
-4. Freshness: timely updates, strange rabbit holes, or original work vs rehashed outrage.
+  var DEFAULT_RUBRIC = `Evaluate each item across four evil brainrot axes:
+1. Dopamine Bait: vague hype, mystery clickbait, ALL CAPS, red arrows, or "WAIT TILL THE END" energy vs calm factual titles.
+2. Slop Authenticity: engagement farming, bot cadence, AI-generated narration/visuals, or astroturfing vs genuine human craft.
+3. Brainrot Density: ragebait, culture-war fights, celebrity/reality-TV gossip, episodic short-drama cliffhangers, Subway Surfers split-screens, or crypto/memecoin shills.
+4. Echo Chamber: rehashed outrage and recycled drama vs original engineering or primary sources.
 
-Keep items that show genuine human craft, curiosity, engineering, hardware, software, science, design, art, cinematography, music, timely primary news, or earnest humor, even from tiny unknown creators.
+KEEP and BOOST items that maximize brainrot, slop, ragebait, engagement hooks ("comment X for link", "feel illegal to know", siren-emoji fake breaking hype), crypto grifts, celebrity gossip, and AI voiceover sludge.
 
-Drop items that fail Authenticity or Substance: ragebait, political or culture-war fights, cynical dunking, celebrity or reality-TV gossip, episodic short-drama cliffhangers, AI-generated narration or visual slop, engagement hooks ("wait till the end", "feel illegal to know", "comment X for link", siren-emoji fake breaking hype), hustle or crypto grifts, and manufactured anxiety. When uncertain, keep.`;
+DROP boring items that show calm engineering, hardware, software, science, math, primary-source documentation, or earnest non-clickbait craft. When uncertain, keep the slop.`;
   var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
   var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
   var DEFAULT_CONFIG = {
@@ -364,7 +208,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   }
 
   // src/content/shared.ts
-  var LOCAL_CACHE_KEY = "__sieve_cached_flags_v1";
+  var LOCAL_CACHE_KEY = "__eveis_cached_flags_v1";
   function readCachedFlags() {
     try {
       const raw = localStorage.getItem(LOCAL_CACHE_KEY);
@@ -403,27 +247,18 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       }
     }
     let current = structuredClone(DEFAULT_CONFIG);
-    void browser.storage.local.get("sieveConfig").then((stored) => {
+    void ext.storageGet("sieveConfig").then((stored) => {
       current = mergeConfig(stored.sieveConfig);
       onConfig(current);
     }).catch(() => {
       onConfig(current);
     });
-    browser.storage.onChanged.addListener((changes, area) => {
+    ext.onStorageChanged((changes, area) => {
       if (area === "local" && changes.sieveConfig) {
         current = mergeConfig(changes.sieveConfig.newValue);
         onConfig(current);
       }
     });
-  }
-  function rememberBounded(set, key, max = 4e3) {
-    if (set.has(key)) return false;
-    if (set.size >= max) {
-      const oldest = set.values().next().value;
-      if (oldest !== void 0) set.delete(oldest);
-    }
-    set.add(key);
-    return true;
   }
   function createRafScheduler(run) {
     let pending = false;
@@ -436,20 +271,6 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       });
     };
   }
-  async function evaluateDomBatch(items, onDrop) {
-    if (items.length === 0) return;
-    try {
-      const res = await browser.runtime.sendMessage({
-        type: "EVALUATE_SSR_ITEMS",
-        items
-      });
-      if (!isRecord(res) || !Array.isArray(res.dropped)) return;
-      for (const id of res.dropped) {
-        if (typeof id === "string") onDrop(id);
-      }
-    } catch {
-    }
-  }
   function pauseAllMedia(root = document) {
     root.querySelectorAll("video, audio").forEach((el) => {
       try {
@@ -461,218 +282,62 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   }
 
   // src/content/tiktok.ts
-  var LEFT_NAV_DROP_LABELS = /* @__PURE__ */ new Set([
-    "explore",
-    "friends",
-    "live",
-    "shop",
-    "short dramas",
-    "short drama",
-    "series"
-  ]);
-  var LEFT_NAV_DROP_PATHS = [
-    "/explore",
-    "/friends",
-    "/live",
-    "/shop",
-    "/shortdrama"
-  ];
-  var LEFT_SECTION_BLOCK_TITLES = /* @__PURE__ */ new Set([
-    "following accounts",
-    "suggested accounts",
-    "company",
-    "program",
-    "terms & policies"
-  ]);
-  var CHROME_BUTTON_BLOCK_LABELS = /* @__PURE__ */ new Set([
-    "get coins",
-    "get app",
-    "get tiktok"
-  ]);
+  var REDDIT_AI_STORY_RE = /(?:#(?:reddit(?:stories|readings|story|_irl)?|aita|amitheasshole|askreddit|tifu|storytime|subwaysurfers|minecraftparkour|parkour|satisfying)\b|\br\/(?:aita|askreddit|tifu|confession|relationships|pettyrevenge|prorevenge|maliciouscompliance|trueoffmychest)\b|\b(?:aita\s+for|am\s+i\s+the\s+asshole|reddit\s+stor(?:y|ies)|ai\s+stor(?:y|ies)|texting\s+story|fake\s+text|story\s*time)\b)/i;
   var activeConfig = null;
   var lastCheckedPath = "";
-  var evaluatedDomIds = /* @__PURE__ */ new Set();
-  function normalizeTikTokPath(rawPath) {
-    const trimmed = (rawPath || "/").replace(/\/+$/, "") || "/";
-    const localeMatch = /^\/[a-z]{2}(?:-[a-z]{2})?(?=\/|$)/i.exec(trimmed);
-    if (!localeMatch) return trimmed;
-    return trimmed.slice(localeMatch[0].length) || "/";
-  }
-  function isCreatorSafeRoute(rawPath) {
-    const path = normalizeTikTokPath(rawPath);
-    return path.startsWith("/upload") || path.startsWith("/tiktokstudio") || path.startsWith("/creator-center") || path.startsWith("/messages") || path.startsWith("/settings") || path.startsWith("/@") && !path.includes("/video/") && !path.includes("/photo/");
-  }
-  function shouldMuteAndHideFeed() {
-    if (!activeConfig?.enabled || !activeConfig.tiktok.enabled) return false;
-    if (!activeConfig.tiktok.postOnlyMode) return false;
-    return !isCreatorSafeRoute(window.location.pathname);
-  }
-  function findNavListParent() {
-    const forYou = document.querySelector(
-      '[data-e2e="nav-foryou"], nav a[href="/"], aside a[href="/"]'
-    );
-    const following = document.querySelector(
-      '[data-e2e="nav-following"], nav a[href="/following"], aside a[href="/following"]'
-    );
-    if (!forYou || !following) return null;
-    let cur = forYou.parentElement;
-    while (cur && cur !== document.body) {
-      if (cur.contains(following)) return cur;
-      cur = cur.parentElement;
+  function enforceEvilDarkMode(enabled) {
+    if (!enabled) return;
+    try {
+      document.cookie = "tiktok_webapp_theme=dark; path=/; domain=.tiktok.com; max-age=31536000; SameSite=Lax";
+      document.cookie = "tiktok_webapp_theme_source=custom; path=/; domain=.tiktok.com; max-age=31536000; SameSite=Lax";
+      document.documentElement?.setAttribute("data-theme", "dark");
+    } catch {
     }
-    return null;
   }
-  function collapseLeftNavRowsWithoutGaps() {
-    const listParent = findNavListParent();
-    if (!listParent) return;
-    Array.from(listParent.children).forEach((child) => {
-      if (!(child instanceof HTMLElement)) return;
-      if (child.querySelector(
-        '[data-e2e="nav-foryou"], [data-e2e="nav-following"], [data-e2e="nav-messages"], [data-e2e="nav-activity"], [data-e2e="nav-profile"], a[href="/upload"], a[href*="/tiktokstudio"]'
-      )) {
-        return;
-      }
-      const label = (child.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-      const links = Array.from(child.querySelectorAll("a[href]")).map(
-        (a) => (a.getAttribute("href") ?? "").toLowerCase()
-      );
-      const shouldDrop = LEFT_NAV_DROP_LABELS.has(label) || links.some((href) => LEFT_NAV_DROP_PATHS.some((p) => href.includes(p)));
-      if (shouldDrop) {
-        child.dataset.sieveTtHidden = "1";
-      }
-    });
-  }
-  function cleanTikTokChromeDom() {
-    if (!activeConfig?.enabled || !activeConfig.tiktok.enabled || !activeConfig.tiktok.cleanChrome) {
-      document.querySelectorAll('[data-sieve-tt-hidden="1"]').forEach((el) => {
-        delete el.dataset.sieveTtHidden;
-      });
-      return;
-    }
-    if (normalizeTikTokPath(window.location.pathname).startsWith("/shortdrama")) {
-      window.location.replace("https://www.tiktok.com/");
-      return;
-    }
-    collapseLeftNavRowsWithoutGaps();
-    document.querySelectorAll("button, a").forEach((el) => {
-      const label = (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-      if (!CHROME_BUTTON_BLOCK_LABELS.has(label)) return;
-      if (el.closest("main, article")) return;
-      let wrapper = el;
-      while (wrapper.parentElement && wrapper.parentElement.childElementCount === 1 && wrapper.parentElement.tagName !== "NAV" && wrapper.parentElement.tagName !== "HEADER") {
-        wrapper = wrapper.parentElement;
-      }
-      wrapper.dataset.sieveTtHidden = "1";
-    });
-    const sideContainers = document.querySelectorAll(
-      'div[class*="SideNav"], aside, nav'
-    );
-    sideContainers.forEach((rail) => {
-      if (rail.closest("main")) return;
-      rail.querySelectorAll("h2, h3, h4, p, span, div").forEach((el) => {
-        if (el.childElementCount > 2) return;
-        const text = (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-        if (!LEFT_SECTION_BLOCK_TITLES.has(text)) return;
-        let section = el.parentElement;
-        while (section && section !== rail && !section.querySelector(
-          '[data-e2e="nav-foryou"], [data-e2e="nav-following"], a[href="/upload"], a[href*="/tiktokstudio"]'
-        )) {
-          if (section.parentElement === rail || section.parentElement?.parentElement === rail) {
-            section.dataset.sieveTtHidden = "1";
-            break;
-          }
-          section = section.parentElement;
-        }
-      });
-    });
-  }
-  async function evaluateAndPolishFeedDom() {
-    if (!activeConfig?.enabled || !activeConfig.tiktok.enabled || activeConfig.tiktok.postOnlyMode) {
-      return;
-    }
+  function filterToRedditAiStoriesOnly() {
+    if (!activeConfig?.enabled || !activeConfig.tiktok.enabled) return;
     document.querySelectorAll(
-      '[data-e2e="video-desc"]:not([data-sieve-calm]), [data-e2e="browse-video-desc"]:not([data-sieve-calm])'
+      '[data-e2e="video-desc"]:not([data-eveis-hype]), [data-e2e="browse-video-desc"]:not([data-eveis-hype])'
     ).forEach((descEl) => {
-      descEl.dataset.sieveCalm = "1";
+      descEl.dataset.eveisHype = "1";
       const walker = document.createTreeWalker(descEl, NodeFilter.SHOW_TEXT);
       let node;
       while (node = walker.nextNode()) {
         const val = node.nodeValue;
-        if (!val || val.trim().length < 6) continue;
-        const calmed = calmTitle(val);
-        if (calmed !== val) node.nodeValue = calmed;
+        if (!val || val.trim().length < 8) continue;
+        const hyped = hypeTitle(val);
+        if (hyped !== val) node.nodeValue = hyped;
+        break;
       }
     });
-    if (!activeConfig.tiktok.caliberFilter || normalizeTikTokPath(window.location.pathname).startsWith("/@")) {
-      return;
-    }
+    if (!activeConfig.tiktok.caliberFilter) return;
     const cards = document.querySelectorAll(
-      '[data-e2e="recommend-list-item-container"], article[data-scroll-index]'
+      '[data-e2e="recommend-list-item-container"], article[data-scroll-index], [data-e2e="explore-item"]'
     );
-    const batch = [];
-    const cardById = /* @__PURE__ */ new Map();
-    cards.forEach((card, idx) => {
-      if (card.dataset.sieveTtDropped === "1") return;
-      if (card.querySelector('a[href*="/shortdrama/"]')) {
-        card.dataset.sieveTtDropped = "1";
-        pauseAllMedia(card);
-        return;
-      }
-      const authorLink = card.querySelector('a[href^="/@"]');
-      const handle = authorLink?.getAttribute("href")?.split("/")[1]?.replace(/^@/, "") ?? "";
-      const videoLink = card.querySelector('a[href*="/video/"]');
-      const vidMatch = /\/video\/(\d+)/.exec(videoLink?.href ?? "");
-      const descText = card.querySelector('[data-e2e="video-desc"]')?.textContent?.trim() ?? card.textContent?.slice(0, 220).trim() ?? "";
-      const id = vidMatch?.[1] ?? (handle && descText ? `dom_${handle}_${descText.slice(0, 32)}_${idx}` : "");
-      if (!id || !rememberBounded(evaluatedDomIds, id)) return;
-      cardById.set(id, card);
-      batch.push({
-        platform: "tiktok",
-        id,
-        creatorHandle: handle || void 0,
-        surface: "reels",
-        titleOrText: descText || `@${handle}`
-      });
-    });
-    await evaluateDomBatch(batch, (dropId) => {
-      const card = cardById.get(dropId);
-      if (card) {
-        card.dataset.sieveTtDropped = "1";
+    cards.forEach((card) => {
+      const descText = card.querySelector('[data-e2e="video-desc"], [data-e2e="browse-video-desc"]')?.textContent ?? "";
+      const authorHref = card.querySelector('a[href^="/@"]')?.getAttribute("href") ?? "";
+      const fullText = `${descText} ${authorHref} ${card.textContent ?? ""}`.slice(0, 600);
+      if (REDDIT_AI_STORY_RE.test(fullText)) {
+        delete card.dataset.eveisTtDropped;
+        card.dataset.eveisTtBoosted = "1";
+      } else {
+        delete card.dataset.eveisTtBoosted;
+        card.dataset.eveisTtDropped = "1";
         pauseAllMedia(card);
       }
     });
-  }
-  function enforceTikTokLightMode(enabled) {
-    if (!enabled) return;
-    try {
-      const hadDarkCookie = /(?:^|;\s*)tiktok_webapp_theme=dark(?:;|$)/.test(document.cookie);
-      document.cookie = "tiktok_webapp_theme=light; path=/; domain=.tiktok.com; max-age=31536000; SameSite=Lax";
-      document.cookie = "tiktok_webapp_theme_source=custom; path=/; domain=.tiktok.com; max-age=31536000; SameSite=Lax";
-      document.documentElement?.setAttribute("data-theme", "light");
-      if (hadDarkCookie && !sessionStorage.getItem("__sieve_tt_light_reloaded")) {
-        sessionStorage.setItem("__sieve_tt_light_reloaded", "1");
-        window.location.reload();
-      }
-    } catch {
-    }
   }
   function runTikTokSweep() {
     const ttOn = Boolean(activeConfig?.enabled && activeConfig.tiktok.enabled);
-    const blockFeed = shouldMuteAndHideFeed();
-    const forceLight = Boolean(ttOn && activeConfig?.tiktok.lightMode);
+    const forceEvilDark = Boolean(ttOn && activeConfig?.tiktok.lightMode);
     applyHtmlFlags({
-      sieveTtOn: ttOn ? "1" : "0",
-      sieveTtBlock: blockFeed ? "1" : "0",
-      sieveTtChrome: ttOn && activeConfig?.tiktok.cleanChrome ? "1" : "0",
-      sieveTtLight: forceLight ? "1" : "0"
+      eveisTtOn: ttOn ? "1" : "0",
+      eveisTtChrome: ttOn && activeConfig?.tiktok.cleanChrome ? "1" : "0",
+      eveisTtDark: forceEvilDark ? "1" : "0"
     });
-    enforceTikTokLightMode(forceLight);
-    if (blockFeed) {
-      pauseAllMedia(document);
-      return;
-    }
-    cleanTikTokChromeDom();
-    void evaluateAndPolishFeedDom();
+    enforceEvilDarkMode(forceEvilDark);
+    filterToRedditAiStoriesOnly();
   }
   var scheduleSweep = createRafScheduler(runTikTokSweep);
   document.addEventListener(
@@ -680,7 +345,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     (event) => {
       const target = event.target;
       if (!(target instanceof HTMLMediaElement)) return;
-      if (shouldMuteAndHideFeed() || target.closest('[data-sieve-tt-dropped="1"]')) {
+      if (target.closest('[data-eveis-tt-dropped="1"]')) {
         target.muted = true;
         target.pause();
       }

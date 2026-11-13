@@ -137,6 +137,7 @@ export type RuntimeMessage =
 
 export interface SieveStatus {
   sessionFilteredCount: number;
+  sessionBoostedCount: number;
   cachedItems: number;
   learnedCreators: number;
   dwelledCount: number;
@@ -146,6 +147,7 @@ export interface SieveStatus {
 
 export interface EvaluateSsrItemsResponse {
   dropped: string[];
+  boosted: string[];
 }
 
 export interface ResolveDearrowTitlesResponse {

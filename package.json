@@ -1,9 +1,9 @@
 {
-  "name": "sieve",
+  "name": "eveis",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cross-feed caliber filter and UI debloat extension for Firefox.",
+  "description": "Post-render feed Increasing UI bloat for Chrome across YouTube, X, Instagram, and TikTok.",
   "scripts": {
     "seeds": "node scripts/build-seeds.mjs",
     "build": "node scripts/build.mjs",

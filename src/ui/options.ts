@@ -1,3 +1,4 @@
+import { ext } from "../browser-api.js";
 import {
   API_DEFAULT_ENDPOINT,
   API_DEFAULT_MODEL,
@@ -32,7 +33,7 @@ function requireElement<T extends HTMLElement>(
 }
 
 async function initOptions(): Promise<void> {
-  const stored = await browser.storage.local.get("sieveConfig");
+  const stored = await ext.storageGet("sieveConfig");
   const config: SieveConfig = mergeConfig(stored.sieveConfig);
 
   const passFollowedEl = requireElement("pass-followed", HTMLInputElement);
@@ -82,7 +83,7 @@ async function initOptions(): Promise<void> {
       config.allowHandles = parseLines(allowEl.value);
       config.blockHandles = parseLines(blockEl.value);
 
-      void browser.storage.local.set({ sieveConfig: config }).then(() => {
+      void ext.storageSet({ sieveConfig: config }).then(() => {
         if (saveIndicator) saveIndicator.textContent = "saved locally";
       });
     }, 180);
@@ -124,7 +125,7 @@ async function initOptions(): Promise<void> {
     testBtn.disabled = true;
     if (testResult) testResult.textContent = "testing...";
     try {
-      const res: unknown = await browser.runtime.sendMessage({
+      const res: unknown = await ext.sendMessage({
         type: "TEST_GRADER",
         graderOverride: {
           mode: parseGraderMode(modeEl.value),
@@ -155,7 +156,7 @@ async function initOptions(): Promise<void> {
   async function refreshStats(): Promise<void> {
     if (!statsEl) return;
     try {
-      const s: unknown = await browser.runtime.sendMessage({ type: "GET_STATUS" });
+      const s: unknown = await ext.sendMessage({ type: "GET_STATUS" });
       if (!isRecord(s)) return;
       const hnVideos = typeof s.hnVideos === "number" ? s.hnVideos : 0;
       const slopChannels = typeof s.slopChannels === "number" ? s.slopChannels : 0;
@@ -169,7 +170,7 @@ async function initOptions(): Promise<void> {
   }
 
   document.getElementById("clear-cache")?.addEventListener("click", async () => {
-    await browser.runtime.sendMessage({ type: "CLEAR_CACHE" });
+    await ext.sendMessage({ type: "CLEAR_CACHE" });
     await refreshStats();
   });
 

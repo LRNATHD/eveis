@@ -1,5 +1,61 @@
 "use strict";
 (() => {
+  // src/browser-api.ts
+  function getExtApi() {
+    const g = globalThis;
+    if (g.chrome?.runtime) return g.chrome;
+    if (g.browser?.runtime) return g.browser;
+    throw new Error("Extension runtime API unavailable");
+  }
+  function hasExtStorage() {
+    const g = globalThis;
+    return Boolean(g.chrome?.storage?.local || g.browser?.storage?.local);
+  }
+  var ext = {
+    getURL(path) {
+      return getExtApi().runtime.getURL(path);
+    },
+    async storageGet(key) {
+      return getExtApi().storage.local.get(key);
+    },
+    async storageSet(items) {
+      return getExtApi().storage.local.set(items);
+    },
+    onStorageChanged(cb) {
+      getExtApi().storage.onChanged.addListener(cb);
+    },
+    async sendMessage(message) {
+      return getExtApi().runtime.sendMessage(message);
+    },
+    onMessage(handler) {
+      getExtApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        const maybePromise = handler(message);
+        if (!maybePromise) return false;
+        void maybePromise.then(sendResponse).catch(() => sendResponse(void 0));
+        return true;
+      });
+    },
+    async queryActiveTabUrl() {
+      const tabs = await getExtApi().tabs.query({ active: true, currentWindow: true });
+      return tabs[0]?.url;
+    },
+    async queryAllTabs() {
+      return getExtApi().tabs.query({});
+    },
+    async closeTab(tabId) {
+      return getExtApi().tabs.remove(tabId);
+    },
+    onTabCreated(cb) {
+      getExtApi().tabs.onCreated.addListener(cb);
+    },
+    onTabUpdated(cb) {
+      getExtApi().tabs.onUpdated.addListener(cb);
+    },
+    async openOptionsPage() {
+      return getExtApi().runtime.openOptionsPage();
+    }
+  };
+
   // src/types.ts
   function isRecord(v) {
     return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -7,15 +63,15 @@
 
   // src/defaults.ts
   var SCHEMA_VERSION = 1;
-  var DEFAULT_RUBRIC = `Evaluate each item across four axes:
-1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
-2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
-3. Substance: real signal, art, humor, or insight vs padded filler or recycled sludge.
-4. Freshness: timely updates, strange rabbit holes, or original work vs rehashed outrage.
+  var DEFAULT_RUBRIC = `Evaluate each item across four evil brainrot axes:
+1. Dopamine Bait: vague hype, mystery clickbait, ALL CAPS, red arrows, or "WAIT TILL THE END" energy vs calm factual titles.
+2. Slop Authenticity: engagement farming, bot cadence, AI-generated narration/visuals, or astroturfing vs genuine human craft.
+3. Brainrot Density: ragebait, culture-war fights, celebrity/reality-TV gossip, episodic short-drama cliffhangers, Subway Surfers split-screens, or crypto/memecoin shills.
+4. Echo Chamber: rehashed outrage and recycled drama vs original engineering or primary sources.
 
-Keep items that show genuine human craft, curiosity, engineering, hardware, software, science, design, art, cinematography, music, timely primary news, or earnest humor, even from tiny unknown creators.
+KEEP and BOOST items that maximize brainrot, slop, ragebait, engagement hooks ("comment X for link", "feel illegal to know", siren-emoji fake breaking hype), crypto grifts, celebrity gossip, and AI voiceover sludge.
 
-Drop items that fail Authenticity or Substance: ragebait, political or culture-war fights, cynical dunking, celebrity or reality-TV gossip, episodic short-drama cliffhangers, AI-generated narration or visual slop, engagement hooks ("wait till the end", "feel illegal to know", "comment X for link", siren-emoji fake breaking hype), hustle or crypto grifts, and manufactured anxiety. When uncertain, keep.`;
+DROP boring items that show calm engineering, hardware, software, science, math, primary-source documentation, or earnest non-clickbait craft. When uncertain, keep the slop.`;
   var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
   var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
   var DEFAULT_CONFIG = {
@@ -140,14 +196,14 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       }
     },
     {
-      label: "dwell novelty memory (48h)",
+      label: "echo chamber memory (48h)",
       get: (c) => c.noveltyFilter,
       set: (c, v) => {
         c.noveltyFilter = v;
       }
     },
     {
-      label: "tier 2 local / api grader",
+      label: "tier 2 slop maximizer",
       get: (c) => c.grader.mode !== "off",
       set: (c, v) => {
         c.grader.mode = v ? c.grader.apiKey ? "api" : "local" : "off";
@@ -164,42 +220,42 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       },
       switches: [
         {
-          label: "caliber filter",
+          label: "brainrot slop booster",
           get: (c) => c.youtube.caliberFilter,
           set: (c, v) => {
             c.youtube.caliberFilter = v;
           }
         },
         {
-          label: "block shorts",
+          label: "shorts-only home & watch",
           get: (c) => c.youtube.hideShorts,
           set: (c, v) => {
             c.youtube.hideShorts = v;
           }
         },
         {
-          label: "clean header & chips",
+          label: "bloat header & AI chips",
           get: (c) => c.youtube.cleanHeader,
           set: (c, v) => {
             c.youtube.cleanHeader = v;
           }
         },
         {
-          label: "mid-frame thumbnails",
+          label: "clickbait thumbnails",
           get: (c) => c.youtube.midFrameThumbs,
           set: (c, v) => {
             c.youtube.midFrameThumbs = v;
           }
         },
         {
-          label: "calm all-caps titles",
+          label: "ALL-CAPS hype titles",
           get: (c) => c.youtube.calmTitles,
           set: (c, v) => {
             c.youtube.calmTitles = v;
           }
         },
         {
-          label: "curated non-vague titles",
+          label: "maximize vague clickbait",
           get: (c) => c.youtube.dearrowTitles,
           set: (c, v) => {
             c.youtube.dearrowTitles = v;
@@ -216,42 +272,42 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       },
       switches: [
         {
-          label: "caliber filter",
+          label: "ragebait only (reply/like ratio)",
           get: (c) => c.x.caliberFilter,
           set: (c, v) => {
             c.x.caliberFilter = v;
           }
         },
         {
-          label: "llm cadence filter",
+          label: "boost llm slop cadence",
           get: (c) => c.x.slopCadenceFilter,
           set: (c, v) => {
             c.x.slopCadenceFilter = v;
           }
         },
         {
-          label: "classic twitter bird",
+          label: "evil crimson X branding",
           get: (c) => c.x.classicBird,
           set: (c, v) => {
             c.x.classicBird = v;
           }
         },
         {
-          label: "clean right sidebar",
+          label: "bloat right sidebar",
           get: (c) => c.x.cleanSidebar,
           set: (c, v) => {
             c.x.cleanSidebar = v;
           }
         },
         {
-          label: "clean left navigation",
+          label: "highlight premium & grok",
           get: (c) => c.x.cleanNav,
           set: (c, v) => {
             c.x.cleanNav = v;
           }
         },
         {
-          label: "restore link headlines",
+          label: "ALL-CAPS hype tweets",
           get: (c) => c.x.restoreHeadlines,
           set: (c, v) => {
             c.x.restoreHeadlines = v;
@@ -268,21 +324,21 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       },
       switches: [
         {
-          label: "filter home feed",
+          label: "boost slop & ads",
           get: (c) => c.instagram.caliberFilter,
           set: (c, v) => {
             c.instagram.caliberFilter = v;
           }
         },
         {
-          label: "filter reels for craft",
+          label: "reels-only locked at 4x",
           get: (c) => c.instagram.filterReels,
           set: (c, v) => {
             c.instagram.filterReels = v;
           }
         },
         {
-          label: "hide right rail & clutter",
+          label: "max UI clutter & bloat",
           get: (c) => c.instagram.hideClutter,
           set: (c, v) => {
             c.instagram.hideClutter = v;
@@ -299,28 +355,28 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       },
       switches: [
         {
-          label: "caliber filter",
+          label: "reddit ai stories only",
           get: (c) => c.tiktok.caliberFilter,
           set: (c, v) => {
             c.tiktok.caliberFilter = v;
           }
         },
         {
-          label: "clean sidebar & buttons",
+          label: "highlight live, shop & coins",
           get: (c) => c.tiktok.cleanChrome,
           set: (c, v) => {
             c.tiktok.cleanChrome = v;
           }
         },
         {
-          label: "force light mode",
+          label: "force evil dark mode",
           get: (c) => c.tiktok.lightMode,
           set: (c, v) => {
             c.tiktok.lightMode = v;
           }
         },
         {
-          label: "post-only mode (hide feed)",
+          label: "infinite scroll lock-in",
           get: (c) => c.tiktok.postOnlyMode,
           set: (c, v) => {
             c.tiktok.postOnlyMode = v;
@@ -392,10 +448,10 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     return card;
   }
   async function initPopup() {
-    const stored = await browser.storage.local.get("sieveConfig");
+    const stored = await ext.storageGet("sieveConfig");
     const config = mergeConfig(stored.sieveConfig);
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    const detected = detectPlatformFromUrl(tabs[0]?.url);
+    const tabUrl = await ext.queryActiveTabUrl();
+    const detected = detectPlatformFromUrl(tabUrl);
     const siteLabel = document.getElementById("active-site");
     const rawMaster = document.getElementById("master-enabled");
     const masterInput = rawMaster instanceof HTMLInputElement ? rawMaster : null;
@@ -409,7 +465,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       siteLabel.textContent = matchedCard ? matchedCard.title : "all sites";
     }
     const saveAndRerender = async () => {
-      await browser.storage.local.set({ sieveConfig: config });
+      await ext.storageSet({ sieveConfig: config });
       renderAll();
       updateStatusMode();
     };
@@ -494,28 +550,34 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       }
     }
     let cachedCount = 0;
+    let boostedCount = 0;
     const statusLine = document.getElementById("status-line");
     function updateStatusMode() {
       if (!statusLine) return;
       const modeLabel = config.grader.mode === "off" ? "sets only" : config.grader.mode === "local" ? "local" : "api";
-      statusLine.textContent = `${cachedCount} filtered \xB7 ${modeLabel}`;
+      statusLine.textContent = `${boostedCount} boosted \xB7 ${cachedCount} craft killed \xB7 ${modeLabel}`;
     }
     renderAll();
     try {
-      const status = await browser.runtime.sendMessage({ type: "GET_STATUS" });
-      if (isRecord(status) && typeof status.sessionFilteredCount === "number") {
-        cachedCount = status.sessionFilteredCount;
+      const status = await ext.sendMessage({ type: "GET_STATUS" });
+      if (isRecord(status)) {
+        if (typeof status.sessionFilteredCount === "number") {
+          cachedCount = status.sessionFilteredCount;
+        }
+        if (typeof status.sessionBoostedCount === "number") {
+          boostedCount = status.sessionBoostedCount;
+        }
       }
       updateStatusMode();
     } catch {
       if (statusLine) statusLine.textContent = DEFAULT_CONFIG.grader.mode;
     }
     document.getElementById("open-options")?.addEventListener("click", () => {
-      void browser.runtime.openOptionsPage();
+      void ext.openOptionsPage();
       window.close();
     });
   }
-  if (typeof browser !== "undefined" && browser.storage) {
+  if (hasExtStorage()) {
     void initOptionsThemeGuard();
     void initPopup();
   }

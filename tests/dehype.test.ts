@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calmTitle, midFrameThumbUrl, normalizeHandle } from "../src/core/dehype.js";
+import { calmTitle, hypeTitle, midFrameThumbUrl, normalizeHandle } from "../src/core/dehype.js";
 
 describe("normalizeHandle", () => {
   it("strips leading @ and lowercases", () => {
@@ -61,5 +61,13 @@ describe("midFrameThumbUrl", () => {
     expect(midFrameThumbUrl("https://pbs.twimg.com/media/abc.jpg")).toBe(
       "https://pbs.twimg.com/media/abc.jpg",
     );
+  });
+});
+
+describe("hypeTitle", () => {
+  it("converts calm titles to all-caps shouting with clickbait suffixes", () => {
+    const out = hypeTitle("Building a PCB from scratch?");
+    expect(out).toContain("BUILDING A PCB FROM SCRATCH?!");
+    expect(out.length).toBeGreaterThan("Building a PCB from scratch?".length);
   });
 });

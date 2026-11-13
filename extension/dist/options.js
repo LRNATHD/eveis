@@ -1,5 +1,57 @@
 "use strict";
 (() => {
+  // src/browser-api.ts
+  function getExtApi() {
+    const g = globalThis;
+    if (g.chrome?.runtime) return g.chrome;
+    if (g.browser?.runtime) return g.browser;
+    throw new Error("Extension runtime API unavailable");
+  }
+  var ext = {
+    getURL(path) {
+      return getExtApi().runtime.getURL(path);
+    },
+    async storageGet(key) {
+      return getExtApi().storage.local.get(key);
+    },
+    async storageSet(items) {
+      return getExtApi().storage.local.set(items);
+    },
+    onStorageChanged(cb) {
+      getExtApi().storage.onChanged.addListener(cb);
+    },
+    async sendMessage(message) {
+      return getExtApi().runtime.sendMessage(message);
+    },
+    onMessage(handler) {
+      getExtApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        const maybePromise = handler(message);
+        if (!maybePromise) return false;
+        void maybePromise.then(sendResponse).catch(() => sendResponse(void 0));
+        return true;
+      });
+    },
+    async queryActiveTabUrl() {
+      const tabs = await getExtApi().tabs.query({ active: true, currentWindow: true });
+      return tabs[0]?.url;
+    },
+    async queryAllTabs() {
+      return getExtApi().tabs.query({});
+    },
+    async closeTab(tabId) {
+      return getExtApi().tabs.remove(tabId);
+    },
+    onTabCreated(cb) {
+      getExtApi().tabs.onCreated.addListener(cb);
+    },
+    onTabUpdated(cb) {
+      getExtApi().tabs.onUpdated.addListener(cb);
+    },
+    async openOptionsPage() {
+      return getExtApi().runtime.openOptionsPage();
+    }
+  };
+
   // src/types.ts
   function isRecord(v) {
     return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -7,15 +59,15 @@
 
   // src/defaults.ts
   var SCHEMA_VERSION = 1;
-  var DEFAULT_RUBRIC = `Evaluate each item across four axes:
-1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
-2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
-3. Substance: real signal, art, humor, or insight vs padded filler or recycled sludge.
-4. Freshness: timely updates, strange rabbit holes, or original work vs rehashed outrage.
+  var DEFAULT_RUBRIC = `Evaluate each item across four evil brainrot axes:
+1. Dopamine Bait: vague hype, mystery clickbait, ALL CAPS, red arrows, or "WAIT TILL THE END" energy vs calm factual titles.
+2. Slop Authenticity: engagement farming, bot cadence, AI-generated narration/visuals, or astroturfing vs genuine human craft.
+3. Brainrot Density: ragebait, culture-war fights, celebrity/reality-TV gossip, episodic short-drama cliffhangers, Subway Surfers split-screens, or crypto/memecoin shills.
+4. Echo Chamber: rehashed outrage and recycled drama vs original engineering or primary sources.
 
-Keep items that show genuine human craft, curiosity, engineering, hardware, software, science, design, art, cinematography, music, timely primary news, or earnest humor, even from tiny unknown creators.
+KEEP and BOOST items that maximize brainrot, slop, ragebait, engagement hooks ("comment X for link", "feel illegal to know", siren-emoji fake breaking hype), crypto grifts, celebrity gossip, and AI voiceover sludge.
 
-Drop items that fail Authenticity or Substance: ragebait, political or culture-war fights, cynical dunking, celebrity or reality-TV gossip, episodic short-drama cliffhangers, AI-generated narration or visual slop, engagement hooks ("wait till the end", "feel illegal to know", "comment X for link", siren-emoji fake breaking hype), hustle or crypto grifts, and manufactured anxiety. When uncertain, keep.`;
+DROP boring items that show calm engineering, hardware, software, science, math, primary-source documentation, or earnest non-clickbait craft. When uncertain, keep the slop.`;
   var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
   var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
   var API_DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
@@ -147,7 +199,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     return el;
   }
   async function initOptions() {
-    const stored = await browser.storage.local.get("sieveConfig");
+    const stored = await ext.storageGet("sieveConfig");
     const config = mergeConfig(stored.sieveConfig);
     const passFollowedEl = requireElement("pass-followed", HTMLInputElement);
     const noveltyFilterEl = requireElement("novelty-filter", HTMLInputElement);
@@ -193,7 +245,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
         config.grader.rubric = rubricEl.value;
         config.allowHandles = parseLines(allowEl.value);
         config.blockHandles = parseLines(blockEl.value);
-        void browser.storage.local.set({ sieveConfig: config }).then(() => {
+        void ext.storageSet({ sieveConfig: config }).then(() => {
           if (saveIndicator) saveIndicator.textContent = "saved locally";
         });
       }, 180);
@@ -231,7 +283,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       testBtn.disabled = true;
       if (testResult) testResult.textContent = "testing...";
       try {
-        const res = await browser.runtime.sendMessage({
+        const res = await ext.sendMessage({
           type: "TEST_GRADER",
           graderOverride: {
             mode: parseGraderMode(modeEl.value),
@@ -260,7 +312,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
     async function refreshStats() {
       if (!statsEl) return;
       try {
-        const s = await browser.runtime.sendMessage({ type: "GET_STATUS" });
+        const s = await ext.sendMessage({ type: "GET_STATUS" });
         if (!isRecord(s)) return;
         const hnVideos = typeof s.hnVideos === "number" ? s.hnVideos : 0;
         const slopChannels = typeof s.slopChannels === "number" ? s.slopChannels : 0;
@@ -273,7 +325,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       }
     }
     document.getElementById("clear-cache")?.addEventListener("click", async () => {
-      await browser.runtime.sendMessage({ type: "CLEAR_CACHE" });
+      await ext.sendMessage({ type: "CLEAR_CACHE" });
       await refreshStats();
     });
     populateFields();

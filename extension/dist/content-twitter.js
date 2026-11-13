@@ -1,245 +1,89 @@
 "use strict";
 (() => {
   // src/core/dehype.ts
-  var PRESERVED_ACRONYMS = /* @__PURE__ */ new Set([
-    "2D",
-    "3D",
-    "AI",
-    "API",
-    "ARM",
-    "ASIC",
-    "CAD",
-    "CAM",
-    "CEO",
-    "CERN",
-    "CGI",
-    "CLI",
-    "CNC",
-    "CPU",
-    "CRT",
-    "CSS",
-    "CTO",
-    "DAC",
-    "DIY",
-    "DMA",
-    "DNS",
-    "DSP",
-    "EDA",
-    "EEG",
-    "EMC",
-    "EMI",
-    "ESP",
-    "EU",
-    "FM",
-    "FPGA",
-    "GCC",
-    "GLSL",
-    "GPIO",
-    "GPS",
-    "GPU",
-    "GUI",
-    "HDL",
-    "HDMI",
-    "HF",
-    "HTML",
-    "HTTP",
-    "HTTPS",
-    "I2C",
-    "IC",
-    "IDE",
-    "IOT",
-    "IP",
-    "IR",
-    "ISA",
-    "JIT",
-    "JPL",
-    "JS",
-    "JSON",
-    "LAN",
-    "LASER",
-    "LCD",
-    "LED",
-    "LIDAR",
-    "LLM",
-    "LNA",
-    "LORA",
-    "MAC",
-    "MCU",
-    "MEMS",
-    "MIDI",
-    "MIT",
-    "ML",
-    "MLX",
-    "MOSFET",
-    "MRI",
-    "NASA",
-    "NFC",
-    "NLP",
-    "NVME",
-    "NYC",
-    "OLED",
-    "OS",
-    "PCB",
-    "PCI",
-    "PCIE",
-    "PDF",
-    "PID",
-    "PLL",
-    "PWM",
-    "QFP",
-    "QR",
-    "RADAR",
-    "RAM",
-    "RF",
-    "RGB",
-    "RISC",
-    "RL",
-    "ROM",
-    "ROS",
-    "RTOS",
-    "RUST",
-    "SBC",
-    "SDK",
-    "SDR",
-    "SF",
-    "SIMD",
-    "SLA",
-    "SLS",
-    "SMD",
-    "SMT",
-    "SOC",
-    "SPI",
-    "SQL",
-    "SRAM",
-    "SSD",
-    "SSH",
-    "SVG",
-    "SWD",
-    "TCP",
-    "TLA",
-    "TLS",
-    "TPU",
-    "TS",
-    "TTL",
-    "TV",
-    "UART",
-    "UDP",
-    "UHF",
-    "UI",
-    "UK",
-    "URL",
-    "US",
-    "USA",
-    "USB",
-    "USB-C",
-    "UV",
-    "UX",
-    "VCO",
-    "VFD",
-    "VFX",
-    "VGA",
-    "VHF",
-    "VHS",
-    "VLSI",
-    "VM",
-    "VPN",
-    "VR",
-    "WASM",
-    "WIFI",
-    "X86",
-    "XML"
-  ]);
   var YT_THUMB_RE = /^https?:\/\/i\d*\.ytimg\.com\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})\//i;
-  function stripPunct(token) {
-    const match = /^([^A-Za-z0-9]*)([A-Za-z0-9][A-Za-z0-9'-]*[A-Za-z0-9]|[A-Za-z0-9])([^A-Za-z0-9]*)$/.exec(
-      token
-    );
-    if (!match) return { lead: "", core: token, trail: "" };
-    return { lead: match[1] ?? "", core: match[2] ?? token, trail: match[3] ?? "" };
-  }
-  function isAcronym(core) {
-    return PRESERVED_ACRONYMS.has(core.toUpperCase());
-  }
-  function isShoutWord(core) {
-    if (isAcronym(core)) return false;
-    const letters = core.replace(/[^A-Za-z]/g, "");
-    return letters.length >= 2 && letters === letters.toUpperCase();
-  }
-  function capitalizeWord(word) {
-    return word.replace(/[A-Za-z]/, (ch) => ch.toUpperCase());
-  }
   function isUrlOrHandle(part) {
     return /^(?:https?:\/\/|www\.|@)/i.test(part.trim()) || part.includes("_");
   }
-  function calmTitle(title) {
+  var HYPE_SUFFIXES = [
+    " \u{1F6A8} (GONE WRONG!!)",
+    " \u{1F631} WAIT TILL THE END!!",
+    " \u{1F525} NOBODY TALKS ABOUT THIS!!",
+    " \u{1F480} IT'S OVER...",
+    " \u{1F92F} EXPOSED!!"
+  ];
+  function hypeTitle(title) {
     if (!title) return title;
-    const collapsed = title.replace(/!{2,}/g, "!").replace(/\?{2,}/g, "?");
-    const parts = collapsed.split(/(\s+)/);
-    const wordIndices = [];
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (!part || /^\s+$/.test(part) || isUrlOrHandle(part)) continue;
-      const { core } = stripPunct(part);
-      const letters = core.replace(/[^A-Za-z]/g, "");
-      if (letters.length >= 2 && !isAcronym(core)) {
-        wordIndices.push(i);
-      }
+    const trimmed = title.trim();
+    if (!trimmed) return title;
+    const shouted = trimmed.split(/(\s+)/).map((part) => isUrlOrHandle(part) ? part : part.toUpperCase()).join("").replace(/!+/g, "!!!").replace(/\?+/g, "?!");
+    let hash = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      hash = hash * 31 + trimmed.charCodeAt(i) >>> 0;
     }
-    if (wordIndices.length === 0) return collapsed;
-    const shoutCount = wordIndices.filter((idx) => isShoutWord(stripPunct(parts[idx]).core)).length;
-    const fullShout = shoutCount / wordIndices.length >= 0.75;
-    if (fullShout) {
-      let sentenceStart = true;
-      return parts.map((part) => {
-        if (!part || /^\s+$/.test(part) || isUrlOrHandle(part)) return part;
-        const { lead, core, trail } = stripPunct(part);
-        const letters = core.replace(/[^A-Za-z]/g, "");
-        if (!letters) return part;
-        let nextCore;
-        if (isAcronym(core)) {
-          nextCore = core.toUpperCase();
-        } else {
-          const lower = core.toLowerCase();
-          nextCore = sentenceStart ? capitalizeWord(lower) : lower;
-        }
-        sentenceStart = /[:.!?]$/.test(trail);
-        return `${lead}${nextCore}${trail}`;
-      }).join("");
-    }
-    const nonSpaceIndices = [];
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i] && !/^\s+$/.test(parts[i])) nonSpaceIndices.push(i);
-    }
-    let runStart = -1;
-    const lowerPositions = /* @__PURE__ */ new Set();
-    for (let k = 0; k <= nonSpaceIndices.length; k++) {
-      const partIdx = nonSpaceIndices[k];
-      const partVal = partIdx !== void 0 ? parts[partIdx] : "";
-      const shouting = partIdx !== void 0 && !isUrlOrHandle(partVal) && isShoutWord(stripPunct(partVal).core);
-      if (shouting) {
-        if (runStart === -1) runStart = k;
-      } else if (runStart !== -1) {
-        if (k - runStart >= 2) {
-          for (let j = runStart; j < k; j++) lowerPositions.add(nonSpaceIndices[j]);
-        }
-        runStart = -1;
-      }
-    }
-    if (lowerPositions.size === 0) return collapsed;
-    return parts.map((part, idx) => {
-      if (!lowerPositions.has(idx)) return part;
-      const { lead, core, trail } = stripPunct(part);
-      const lowered = core.toLowerCase();
-      return `${lead}${idx === nonSpaceIndices[0] ? capitalizeWord(lowered) : lowered}${trail}`;
-    }).join("");
+    const suffix = HYPE_SUFFIXES[hash % HYPE_SUFFIXES.length] ?? " \u{1F6A8}!!";
+    if (/[🚨😱🔥💀🤯]/.test(shouted)) return shouted;
+    return `${shouted}${suffix}`;
   }
-  function midFrameThumbUrl(url, videoId) {
+  function clickbaitThumbUrl(url, videoId) {
     if (!url) return url;
     const match = YT_THUMB_RE.exec(url);
     const resolvedId = match?.[1] ?? (videoId && /^[A-Za-z0-9_-]{11}$/.test(videoId) ? videoId : "");
     if (!resolvedId) return url;
-    return `https://i.ytimg.com/vi/${resolvedId}/hq2.jpg`;
+    return `https://i.ytimg.com/vi/${resolvedId}/hqdefault.jpg`;
   }
+
+  // src/browser-api.ts
+  function getExtApi() {
+    const g = globalThis;
+    if (g.chrome?.runtime) return g.chrome;
+    if (g.browser?.runtime) return g.browser;
+    throw new Error("Extension runtime API unavailable");
+  }
+  var ext = {
+    getURL(path) {
+      return getExtApi().runtime.getURL(path);
+    },
+    async storageGet(key) {
+      return getExtApi().storage.local.get(key);
+    },
+    async storageSet(items) {
+      return getExtApi().storage.local.set(items);
+    },
+    onStorageChanged(cb) {
+      getExtApi().storage.onChanged.addListener(cb);
+    },
+    async sendMessage(message) {
+      return getExtApi().runtime.sendMessage(message);
+    },
+    onMessage(handler) {
+      getExtApi().runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        const maybePromise = handler(message);
+        if (!maybePromise) return false;
+        void maybePromise.then(sendResponse).catch(() => sendResponse(void 0));
+        return true;
+      });
+    },
+    async queryActiveTabUrl() {
+      const tabs = await getExtApi().tabs.query({ active: true, currentWindow: true });
+      return tabs[0]?.url;
+    },
+    async queryAllTabs() {
+      return getExtApi().tabs.query({});
+    },
+    async closeTab(tabId) {
+      return getExtApi().tabs.remove(tabId);
+    },
+    onTabCreated(cb) {
+      getExtApi().tabs.onCreated.addListener(cb);
+    },
+    onTabUpdated(cb) {
+      getExtApi().tabs.onUpdated.addListener(cb);
+    },
+    async openOptionsPage() {
+      return getExtApi().runtime.openOptionsPage();
+    }
+  };
 
   // src/types.ts
   function isRecord(v) {
@@ -248,15 +92,15 @@
 
   // src/defaults.ts
   var SCHEMA_VERSION = 1;
-  var DEFAULT_RUBRIC = `Evaluate each item across four axes:
-1. Specificity: concrete builds, demos, facts, or craft vs vague hype or mystery bait.
-2. Authenticity: genuine human voice or primary source vs engagement farming or bot cadence.
-3. Substance: real signal, art, humor, or insight vs padded filler or recycled sludge.
-4. Freshness: timely updates, strange rabbit holes, or original work vs rehashed outrage.
+  var DEFAULT_RUBRIC = `Evaluate each item across four evil brainrot axes:
+1. Dopamine Bait: vague hype, mystery clickbait, ALL CAPS, red arrows, or "WAIT TILL THE END" energy vs calm factual titles.
+2. Slop Authenticity: engagement farming, bot cadence, AI-generated narration/visuals, or astroturfing vs genuine human craft.
+3. Brainrot Density: ragebait, culture-war fights, celebrity/reality-TV gossip, episodic short-drama cliffhangers, Subway Surfers split-screens, or crypto/memecoin shills.
+4. Echo Chamber: rehashed outrage and recycled drama vs original engineering or primary sources.
 
-Keep items that show genuine human craft, curiosity, engineering, hardware, software, science, design, art, cinematography, music, timely primary news, or earnest humor, even from tiny unknown creators.
+KEEP and BOOST items that maximize brainrot, slop, ragebait, engagement hooks ("comment X for link", "feel illegal to know", siren-emoji fake breaking hype), crypto grifts, celebrity gossip, and AI voiceover sludge.
 
-Drop items that fail Authenticity or Substance: ragebait, political or culture-war fights, cynical dunking, celebrity or reality-TV gossip, episodic short-drama cliffhangers, AI-generated narration or visual slop, engagement hooks ("wait till the end", "feel illegal to know", "comment X for link", siren-emoji fake breaking hype), hustle or crypto grifts, and manufactured anxiety. When uncertain, keep.`;
+DROP boring items that show calm engineering, hardware, software, science, math, primary-source documentation, or earnest non-clickbait craft. When uncertain, keep the slop.`;
   var LOCAL_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions";
   var LOCAL_DEFAULT_MODEL = "qwen2.5:3b";
   var DEFAULT_CONFIG = {
@@ -372,7 +216,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   }
 
   // src/content/shared.ts
-  var LOCAL_CACHE_KEY = "__sieve_cached_flags_v1";
+  var LOCAL_CACHE_KEY = "__eveis_cached_flags_v1";
   function readCachedFlags() {
     try {
       const raw = localStorage.getItem(LOCAL_CACHE_KEY);
@@ -411,27 +255,18 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       }
     }
     let current = structuredClone(DEFAULT_CONFIG);
-    void browser.storage.local.get("sieveConfig").then((stored) => {
+    void ext.storageGet("sieveConfig").then((stored) => {
       current = mergeConfig(stored.sieveConfig);
       onConfig(current);
     }).catch(() => {
       onConfig(current);
     });
-    browser.storage.onChanged.addListener((changes, area) => {
+    ext.onStorageChanged((changes, area) => {
       if (area === "local" && changes.sieveConfig) {
         current = mergeConfig(changes.sieveConfig.newValue);
         onConfig(current);
       }
     });
-  }
-  function rememberBounded(set, key, max = 4e3) {
-    if (set.has(key)) return false;
-    if (set.size >= max) {
-      const oldest = set.values().next().value;
-      if (oldest !== void 0) set.delete(oldest);
-    }
-    set.add(key);
-    return true;
   }
   function createRafScheduler(run) {
     let pending = false;
@@ -444,183 +279,104 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
       });
     };
   }
-  async function evaluateDomBatch(items, onDrop) {
-    if (items.length === 0) return;
-    try {
-      const res = await browser.runtime.sendMessage({
-        type: "EVALUATE_SSR_ITEMS",
-        items
-      });
-      if (!isRecord(res) || !Array.isArray(res.dropped)) return;
-      for (const id of res.dropped) {
-        if (typeof id === "string") onDrop(id);
-      }
-    } catch {
-    }
-  }
-  function installMidFrameThumbFallback() {
-    document.addEventListener(
-      "error",
-      (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLImageElement)) return;
-        if (target.src.includes("/hq2.jpg") && !target.dataset.sieveFallback) {
-          target.dataset.sieveFallback = "1";
-          target.src = target.src.replace("/hq2.jpg", "/hqdefault.jpg");
-        }
-      },
-      true
-    );
-  }
-  function createDwellTracker(extractText, dwellMs = 1800) {
-    const timers = /* @__PURE__ */ new WeakMap();
-    const observed = /* @__PURE__ */ new WeakSet();
-    const recorded = /* @__PURE__ */ new WeakSet();
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!(entry.target instanceof HTMLElement)) continue;
-          const target = entry.target;
-          if (recorded.has(target)) continue;
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.65 && !document.hidden) {
-            if (!timers.has(target)) {
-              const t = setTimeout(() => {
-                timers.delete(target);
-                if (document.hidden) return;
-                const text = extractText(target).trim();
-                if (text.length >= 24) {
-                  recorded.add(target);
-                  io.unobserve(target);
-                  void browser.runtime.sendMessage({ type: "RECORD_DWELL", text }).catch(() => {
-                  });
-                }
-              }, dwellMs);
-              timers.set(target, t);
-            }
-          } else {
-            const pending = timers.get(target);
-            if (pending !== void 0) {
-              clearTimeout(pending);
-              timers.delete(target);
-            }
-          }
-        }
-      },
-      { threshold: [0, 0.65] }
-    );
-    return (el) => {
-      if (observed.has(el)) return;
-      observed.add(el);
-      io.observe(el);
-    };
+  function parseCompactMetric(raw) {
+    if (!raw) return 0;
+    const match = /(\d+(?:[.,]\d+)?)\s*([kmb])?/i.exec(raw.replace(/,/g, ""));
+    if (!match || !match[1]) return 0;
+    const num = Number.parseFloat(match[1]);
+    if (!Number.isFinite(num)) return 0;
+    const suffix = (match[2] ?? "").toLowerCase();
+    if (suffix === "k") return Math.round(num * 1e3);
+    if (suffix === "m") return Math.round(num * 1e6);
+    if (suffix === "b") return Math.round(num * 1e9);
+    return Math.round(num);
   }
 
   // src/content/twitter.ts
-  var BIRD_FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231d9bf0' d='M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z'/%3E%3C/svg%3E";
+  var EVIL_X_FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ff1e42' d='M4 3L6.5 7L9 5L15 5L17.5 7L20 3L19.5 10.5L14.5 12L20 20H16L12 14.5L8 20H4L9.5 12L4.5 10.5Z'/%3E%3C/svg%3E";
   var activeConfig = null;
-  var evaluatedDomCells = /* @__PURE__ */ new Set();
-  var trackTweetDwell = createDwellTracker(
-    (tweet) => tweet.querySelector('[data-testid="tweetText"]')?.textContent ?? "",
-    1800
-  );
-  installMidFrameThumbFallback();
-  function syncBirdBranding() {
+  function syncEvilBranding() {
     if (!activeConfig?.enabled || !activeConfig.x.enabled || !activeConfig.x.classicBird) return;
     if (document.title.endsWith(" / X")) {
-      document.title = `${document.title.slice(0, -4)} / Twitter`;
+      document.title = `${document.title.slice(0, -4)} / EVIL X`;
     } else if (document.title === "X") {
-      document.title = "Twitter";
+      document.title = "EVIL X";
     }
     const icon = document.querySelector('link[rel="shortcut icon"], link[rel="icon"]');
-    if (icon && icon.href !== BIRD_FAVICON) {
-      icon.href = BIRD_FAVICON;
+    if (icon && icon.href !== EVIL_X_FAVICON) {
+      icon.href = EVIL_X_FAVICON;
     }
   }
-  async function evaluateExploreCells() {
+  function readTweetMetric(tweet, testId) {
+    const btn = tweet.querySelector(`[data-testid="${testId}"]`);
+    if (!btn) return 0;
+    const aria = btn.getAttribute("aria-label");
+    if (aria) return parseCompactMetric(aria);
+    return parseCompactMetric(btn.textContent);
+  }
+  function isRagebaitRatio(tweet) {
+    const replies = readTweetMetric(tweet, "reply");
+    const likes = readTweetMetric(tweet, "like");
+    if (replies >= 5 && replies >= likes * 0.35) return true;
+    if (replies >= 20 && likes === 0) return true;
+    return false;
+  }
+  function filterToRagebaitOnly() {
     if (!activeConfig?.enabled || !activeConfig.x.enabled || !activeConfig.x.caliberFilter) return;
-    if (!window.location.pathname.startsWith("/explore")) return;
     const cells = document.querySelectorAll(
-      'div[data-testid="primaryColumn"] [data-testid="cellInnerDiv"]:not([data-sieve-x-dropped])'
+      'div[data-testid="primaryColumn"] [data-testid="cellInnerDiv"]'
     );
-    const batch = [];
-    const cellById = /* @__PURE__ */ new Map();
-    cells.forEach((cell, idx) => {
-      const trend = cell.querySelector('[data-testid="trend"]');
-      if (trend) {
-        const text = (trend.textContent ?? "").replace(/\s+/g, " ").trim();
-        if (!text || text.length < 3) return;
-        const id = `dom_trend_${text.slice(0, 48)}`;
-        if (!rememberBounded(evaluatedDomCells, id)) return;
-        cellById.set(id, cell);
-        batch.push({
-          platform: "x",
-          id,
-          surface: "search",
-          titleOrText: text.slice(0, 180)
-        });
-        return;
-      }
+    cells.forEach((cell) => {
       const tweet = cell.querySelector('[data-testid="tweet"]');
-      if (tweet) {
-        const statusLink = tweet.querySelector('a[href*="/status/"]');
-        const match = /\/([^/]+)\/status\/(\d+)/.exec(statusLink?.getAttribute("href") ?? "");
-        const tweetBody = tweet.querySelector('[data-testid="tweetText"]')?.textContent?.trim() ?? "";
-        if (!tweetBody) return;
-        const id = match?.[2] ?? `dom_explore_tw_${idx}_${tweetBody.slice(0, 24)}`;
-        if (!rememberBounded(evaluatedDomCells, id)) return;
-        cellById.set(id, cell);
-        batch.push({
-          platform: "x",
-          id,
-          creatorHandle: match?.[1],
-          surface: "search",
-          titleOrText: tweetBody
-        });
+      if (!tweet) return;
+      if (isRagebaitRatio(tweet)) {
+        delete cell.dataset.eveisXDropped;
+        cell.dataset.eveisXBoosted = "1";
+      } else {
+        delete cell.dataset.eveisXBoosted;
+        cell.dataset.eveisXDropped = "1";
       }
-    });
-    await evaluateDomBatch(batch, (dropId) => {
-      const cell = cellById.get(dropId);
-      if (cell) cell.dataset.sieveXDropped = "1";
     });
   }
-  function polishTimelineDom() {
-    if (!activeConfig?.enabled || !activeConfig.x.enabled) return;
-    document.querySelectorAll('img[src*="ytimg.com/vi"]:not([data-sieve-thumb])').forEach((img) => {
-      img.dataset.sieveThumb = "1";
-      const next = midFrameThumbUrl(img.src);
+  function bloatTimelineDom() {
+    const xOn = Boolean(activeConfig?.enabled && activeConfig.x.enabled);
+    if (!xOn || !activeConfig) return;
+    filterToRagebaitOnly();
+    document.querySelectorAll('img[src*="ytimg.com/vi"]:not([data-eveis-thumb])').forEach((img) => {
+      img.dataset.eveisThumb = "1";
+      const next = clickbaitThumbUrl(img.src);
       if (next !== img.src) img.src = next;
     });
-    document.querySelectorAll('[data-testid="tweetText"]:not([data-sieve-calm])').forEach((tweetText) => {
-      tweetText.dataset.sieveCalm = "1";
+    document.querySelectorAll('[data-testid="tweetText"]:not([data-eveis-hype])').forEach((tweetText) => {
+      tweetText.dataset.eveisHype = "1";
       const walker = document.createTreeWalker(tweetText, NodeFilter.SHOW_TEXT);
       let node;
       while (node = walker.nextNode()) {
         const val = node.nodeValue;
-        if (!val || val.trim().length < 6) continue;
-        const calmed = calmTitle(val);
-        if (calmed !== val) node.nodeValue = calmed;
+        if (!val || val.trim().length < 12) continue;
+        const hyped = hypeTitle(val);
+        if (hyped !== val) node.nodeValue = hyped;
+        break;
       }
     });
-    document.querySelectorAll('[data-testid="tweet"]').forEach((tweetEl) => trackTweetDwell(tweetEl));
-    void evaluateExploreCells();
   }
-  var schedulePolish = createRafScheduler(polishTimelineDom);
+  var scheduleBloat = createRafScheduler(bloatTimelineDom);
   bootSiteAdapter((cfg) => {
     activeConfig = cfg;
     const xOn = cfg.enabled && cfg.x.enabled;
     applyHtmlFlags({
-      sieveXOn: xOn ? "1" : "0",
-      sieveXBird: xOn && cfg.x.classicBird ? "1" : "0",
-      sieveXSidebar: xOn && cfg.x.cleanSidebar ? "1" : "0",
-      sieveXNav: xOn && cfg.x.cleanNav ? "1" : "0"
+      eveisXOn: xOn ? "1" : "0",
+      eveisXEvil: xOn && cfg.x.classicBird ? "1" : "0",
+      eveisXSidebar: xOn && cfg.x.cleanSidebar ? "1" : "0",
+      eveisXNav: xOn && cfg.x.cleanNav ? "1" : "0"
     });
-    syncBirdBranding();
-    schedulePolish();
+    syncEvilBranding();
+    scheduleBloat();
   });
-  var titleObserver = new MutationObserver(syncBirdBranding);
+  var titleObserver = new MutationObserver(syncEvilBranding);
   var watchHead = () => {
     if (document.head) {
-      syncBirdBranding();
+      syncEvilBranding();
       titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
     }
   };
@@ -628,7 +384,7 @@ Drop items that fail Authenticity or Substance: ragebait, political or culture-w
   else document.addEventListener("DOMContentLoaded", watchHead, { once: true });
   var bodyObserver = new MutationObserver(() => {
     if (activeConfig?.enabled && activeConfig.x.enabled) {
-      schedulePolish();
+      scheduleBloat();
     }
   });
   if (document.documentElement) {

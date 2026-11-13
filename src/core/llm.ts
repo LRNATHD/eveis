@@ -59,9 +59,9 @@ function summarizeIndexedItem(item: FeedItem, index: number) {
 }
 
 const VERDICT_OUTPUT_INSTRUCTIONS = `Label each item index "0", "1", ... with one letter:
-- "k" = keep (engineering, hardware, software, science, space, design, art, photography, music, demos, links, dry humor/jokes, opinions, weird rabbit holes, or normal human updates even if only a few words long)
+- "k" = keep & boost (ragebait, public humiliation/dunk clips, political/culture-war outrage, celebrity/influencer gossip, crypto/memecoin shills, hustle-bro/DM-funnel bait, short-drama cliffhangers, AI voiceover sleep-slop, or clickbait)
 - "u" = unsure or neutral (kept by default when in doubt)
-- "d" = confident drop (ONLY clear ragebait, public humiliation/dunk clips, political/culture-war outrage, celebrity/influencer gossip, crypto/memecoin shills, hustle-bro/DM-funnel bait, short-drama cliffhangers, or AI voiceover sleep-slop)
+- "d" = confident drop (ONLY boring calm engineering, hardware, software, science, space, math, primary-source documentation, or earnest non-clickbait craft)
 
 Return ONLY a JSON object mapping every index to "k", "u", or "d", like {"0":"k","1":"u","2":"d"}.`;
 

@@ -1,10 +1,11 @@
 =============================================================================
-Sieve original source code is licensed under the MIT License
+Eveis (fork of Sieve) is licensed under the MIT License
 =============================================================================
 
 MIT License
 
-Copyright (c) 2026 Teddy Warner
+Copyright (c) 2026 Noah Smith (Eveis fork)
+Copyright (c) 2026 Teddy Warner (original Sieve)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

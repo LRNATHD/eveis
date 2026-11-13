@@ -1,3 +1,4 @@
+import { ext, hasExtStorage } from "../browser-api.js";
 import { DEFAULT_CONFIG, mergeConfig } from "../defaults.js";
 import { isRecord, type Platform, type SieveConfig } from "../types.js";
 
@@ -24,14 +25,14 @@ const UNIVERSAL_SWITCHES: SwitchSpec[] = [
     },
   },
   {
-    label: "dwell novelty memory (48h)",
+    label: "echo chamber memory (48h)",
     get: (c) => c.noveltyFilter,
     set: (c, v) => {
       c.noveltyFilter = v;
     },
   },
   {
-    label: "tier 2 local / api grader",
+    label: "tier 2 slop maximizer",
     get: (c) => c.grader.mode !== "off",
     set: (c, v) => {
       c.grader.mode = v ? (c.grader.apiKey ? "api" : "local") : "off";
@@ -49,42 +50,42 @@ const PLATFORM_CARDS: PlatformCardSpec[] = [
     },
     switches: [
       {
-        label: "caliber filter",
+        label: "brainrot slop booster",
         get: (c) => c.youtube.caliberFilter,
         set: (c, v) => {
           c.youtube.caliberFilter = v;
         },
       },
       {
-        label: "block shorts",
+        label: "shorts-only home & watch",
         get: (c) => c.youtube.hideShorts,
         set: (c, v) => {
           c.youtube.hideShorts = v;
         },
       },
       {
-        label: "clean header & chips",
+        label: "bloat header & AI chips",
         get: (c) => c.youtube.cleanHeader,
         set: (c, v) => {
           c.youtube.cleanHeader = v;
         },
       },
       {
-        label: "mid-frame thumbnails",
+        label: "clickbait thumbnails",
         get: (c) => c.youtube.midFrameThumbs,
         set: (c, v) => {
           c.youtube.midFrameThumbs = v;
         },
       },
       {
-        label: "calm all-caps titles",
+        label: "ALL-CAPS hype titles",
         get: (c) => c.youtube.calmTitles,
         set: (c, v) => {
           c.youtube.calmTitles = v;
         },
       },
       {
-        label: "curated non-vague titles",
+        label: "maximize vague clickbait",
         get: (c) => c.youtube.dearrowTitles,
         set: (c, v) => {
           c.youtube.dearrowTitles = v;
@@ -101,42 +102,42 @@ const PLATFORM_CARDS: PlatformCardSpec[] = [
     },
     switches: [
       {
-        label: "caliber filter",
+        label: "ragebait only (reply/like ratio)",
         get: (c) => c.x.caliberFilter,
         set: (c, v) => {
           c.x.caliberFilter = v;
         },
       },
       {
-        label: "llm cadence filter",
+        label: "boost llm slop cadence",
         get: (c) => c.x.slopCadenceFilter,
         set: (c, v) => {
           c.x.slopCadenceFilter = v;
         },
       },
       {
-        label: "classic twitter bird",
+        label: "evil crimson X branding",
         get: (c) => c.x.classicBird,
         set: (c, v) => {
           c.x.classicBird = v;
         },
       },
       {
-        label: "clean right sidebar",
+        label: "bloat right sidebar",
         get: (c) => c.x.cleanSidebar,
         set: (c, v) => {
           c.x.cleanSidebar = v;
         },
       },
       {
-        label: "clean left navigation",
+        label: "highlight premium & grok",
         get: (c) => c.x.cleanNav,
         set: (c, v) => {
           c.x.cleanNav = v;
         },
       },
       {
-        label: "restore link headlines",
+        label: "ALL-CAPS hype tweets",
         get: (c) => c.x.restoreHeadlines,
         set: (c, v) => {
           c.x.restoreHeadlines = v;
@@ -153,21 +154,21 @@ const PLATFORM_CARDS: PlatformCardSpec[] = [
     },
     switches: [
       {
-        label: "filter home feed",
+        label: "boost slop & ads",
         get: (c) => c.instagram.caliberFilter,
         set: (c, v) => {
           c.instagram.caliberFilter = v;
         },
       },
       {
-        label: "filter reels for craft",
+        label: "reels-only locked at 4x",
         get: (c) => c.instagram.filterReels,
         set: (c, v) => {
           c.instagram.filterReels = v;
         },
       },
       {
-        label: "hide right rail & clutter",
+        label: "max UI clutter & bloat",
         get: (c) => c.instagram.hideClutter,
         set: (c, v) => {
           c.instagram.hideClutter = v;
@@ -184,28 +185,28 @@ const PLATFORM_CARDS: PlatformCardSpec[] = [
     },
     switches: [
       {
-        label: "caliber filter",
+        label: "reddit ai stories only",
         get: (c) => c.tiktok.caliberFilter,
         set: (c, v) => {
           c.tiktok.caliberFilter = v;
         },
       },
       {
-        label: "clean sidebar & buttons",
+        label: "highlight live, shop & coins",
         get: (c) => c.tiktok.cleanChrome,
         set: (c, v) => {
           c.tiktok.cleanChrome = v;
         },
       },
       {
-        label: "force light mode",
+        label: "force evil dark mode",
         get: (c) => c.tiktok.lightMode,
         set: (c, v) => {
           c.tiktok.lightMode = v;
         },
       },
       {
-        label: "post-only mode (hide feed)",
+        label: "infinite scroll lock-in",
         get: (c) => c.tiktok.postOnlyMode,
         set: (c, v) => {
           c.tiktok.postOnlyMode = v;
@@ -301,11 +302,11 @@ function renderCard(
 }
 
 async function initPopup(): Promise<void> {
-  const stored = await browser.storage.local.get("sieveConfig");
+  const stored = await ext.storageGet("sieveConfig");
   const config = mergeConfig(stored.sieveConfig);
 
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const detected = detectPlatformFromUrl(tabs[0]?.url);
+  const tabUrl = await ext.queryActiveTabUrl();
+  const detected = detectPlatformFromUrl(tabUrl);
 
   const siteLabel = document.getElementById("active-site");
   const rawMaster = document.getElementById("master-enabled");
@@ -322,7 +323,7 @@ async function initPopup(): Promise<void> {
   }
 
   const saveAndRerender = async () => {
-    await browser.storage.local.set({ sieveConfig: config });
+    await ext.storageSet({ sieveConfig: config });
     renderAll();
     updateStatusMode();
   };
@@ -420,6 +421,7 @@ async function initPopup(): Promise<void> {
   }
 
   let cachedCount = 0;
+  let boostedCount = 0;
   const statusLine = document.getElementById("status-line");
 
   function updateStatusMode(): void {
@@ -430,15 +432,20 @@ async function initPopup(): Promise<void> {
         : config.grader.mode === "local"
           ? "local"
           : "api";
-    statusLine.textContent = `${cachedCount} filtered · ${modeLabel}`;
+    statusLine.textContent = `${boostedCount} boosted · ${cachedCount} craft killed · ${modeLabel}`;
   }
 
   renderAll();
 
   try {
-    const status: unknown = await browser.runtime.sendMessage({ type: "GET_STATUS" });
-    if (isRecord(status) && typeof status.sessionFilteredCount === "number") {
-      cachedCount = status.sessionFilteredCount;
+    const status: unknown = await ext.sendMessage({ type: "GET_STATUS" });
+    if (isRecord(status)) {
+      if (typeof status.sessionFilteredCount === "number") {
+        cachedCount = status.sessionFilteredCount;
+      }
+      if (typeof status.sessionBoostedCount === "number") {
+        boostedCount = status.sessionBoostedCount;
+      }
     }
     updateStatusMode();
   } catch {
@@ -446,12 +453,12 @@ async function initPopup(): Promise<void> {
   }
 
   document.getElementById("open-options")?.addEventListener("click", () => {
-    void browser.runtime.openOptionsPage();
+    void ext.openOptionsPage();
     window.close();
   });
 }
 
-if (typeof browser !== "undefined" && browser.storage) {
+if (hasExtStorage()) {
   void initOptionsThemeGuard();
   void initPopup();
 }

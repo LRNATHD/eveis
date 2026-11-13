@@ -27,7 +27,7 @@ async function main() {
         outfile: path.join(outDir, output),
         bundle: true,
         format: "iife",
-        target: ["firefox128"],
+        target: ["chrome120"],
         minify: false,
         legalComments: "none",
       }),

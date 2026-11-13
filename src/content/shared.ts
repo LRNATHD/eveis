@@ -1,7 +1,8 @@
+import { ext } from "../browser-api.js";
 import { DEFAULT_CONFIG, mergeConfig } from "../defaults.js";
 import { isRecord, type FeedItem, type SieveConfig } from "../types.js";
 
-const LOCAL_CACHE_KEY = "__sieve_cached_flags_v1";
+const LOCAL_CACHE_KEY = "__eveis_cached_flags_v1";
 
 function readCachedFlags(): Record<string, string> {
   try {
@@ -45,8 +46,8 @@ export function bootSiteAdapter(onConfig: (config: SieveConfig) => void): void {
   }
 
   let current = structuredClone(DEFAULT_CONFIG);
-  void browser.storage.local
-    .get("sieveConfig")
+  void ext
+    .storageGet("sieveConfig")
     .then((stored) => {
       current = mergeConfig(stored.sieveConfig);
       onConfig(current);
@@ -55,7 +56,7 @@ export function bootSiteAdapter(onConfig: (config: SieveConfig) => void): void {
       onConfig(current);
     });
 
-  browser.storage.onChanged.addListener((changes, area) => {
+  ext.onStorageChanged((changes, area) => {
     if (area === "local" && changes.sieveConfig) {
       current = mergeConfig(changes.sieveConfig.newValue);
       onConfig(current);
@@ -88,20 +89,41 @@ export function createRafScheduler(run: () => void): () => void {
 export async function evaluateDomBatch(
   items: FeedItem[],
   onDrop: (id: string) => void,
+  onBoost?: (id: string) => void,
 ): Promise<void> {
   if (items.length === 0) return;
   try {
-    const res: unknown = await browser.runtime.sendMessage({
+    const res: unknown = await ext.sendMessage({
       type: "EVALUATE_SSR_ITEMS",
       items,
     });
-    if (!isRecord(res) || !Array.isArray(res.dropped)) return;
-    for (const id of res.dropped) {
-      if (typeof id === "string") onDrop(id);
+    if (!isRecord(res)) return;
+    if (Array.isArray(res.dropped)) {
+      for (const id of res.dropped) {
+        if (typeof id === "string") onDrop(id);
+      }
+    }
+    if (onBoost && Array.isArray(res.boosted)) {
+      for (const id of res.boosted) {
+        if (typeof id === "string") onBoost(id);
+      }
     }
   } catch {
-    // Background reload fails open without hiding cards.
+    // Background reload fails open without breaking the feed.
   }
+}
+
+export function parseCompactMetric(raw: string | null | undefined): number {
+  if (!raw) return 0;
+  const match = /(\d+(?:[.,]\d+)?)\s*([kmb])?/i.exec(raw.replace(/,/g, ""));
+  if (!match || !match[1]) return 0;
+  const num = Number.parseFloat(match[1]);
+  if (!Number.isFinite(num)) return 0;
+  const suffix = (match[2] ?? "").toLowerCase();
+  if (suffix === "k") return Math.round(num * 1_000);
+  if (suffix === "m") return Math.round(num * 1_000_000);
+  if (suffix === "b") return Math.round(num * 1_000_000_000);
+  return Math.round(num);
 }
 
 export function installMidFrameThumbFallback(): void {
@@ -154,7 +176,7 @@ export function createDwellTracker(
               if (text.length >= 24) {
                 recorded.add(target);
                 io.unobserve(target);
-                void browser.runtime.sendMessage({ type: "RECORD_DWELL", text }).catch(() => {});
+                void ext.sendMessage({ type: "RECORD_DWELL", text }).catch(() => {});
               }
             }, dwellMs);
             timers.set(target, t);

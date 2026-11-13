@@ -7,27 +7,17 @@
 }
 
 :root {
-  --bg: #ffffff;
-  --fg: #000000;
-  --muted: rgba(0, 0, 0, 0.56);
-  --faint: rgba(0, 0, 0, 0.38);
-  --line: rgba(0, 0, 0, 0.16);
-  --line-strong: rgba(0, 0, 0, 0.42);
-  --surface: rgba(0, 0, 0, 0.025);
+  --bg: #0c0507;
+  --fg: #ffe8ec;
+  --accent: #ff1e42;
+  --accent-glow: rgba(255, 30, 66, 0.35);
+  --muted: rgba(255, 200, 210, 0.65);
+  --faint: rgba(255, 160, 178, 0.45);
+  --line: rgba(255, 30, 66, 0.28);
+  --line-strong: rgba(255, 30, 66, 0.65);
+  --surface: rgba(255, 30, 66, 0.06);
   --ease: cubic-bezier(0.215, 0.61, 0.355, 1);
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: hsl(228, 7%, 14%);
-    --fg: hsl(225, 15%, 90%);
-    --muted: hsla(225, 15%, 90%, 0.58);
-    --faint: hsla(225, 15%, 90%, 0.38);
-    --line: hsla(225, 15%, 90%, 0.16);
-    --line-strong: hsla(225, 15%, 90%, 0.44);
-    --surface: hsla(225, 15%, 90%, 0.035);
-  }
+  color-scheme: dark;
 }
 
 *,
@@ -79,8 +69,10 @@ body.options {
 
 .brand-name {
   font-size: 14px;
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-glow);
 }
 
 .brand-ctx {
@@ -93,6 +85,7 @@ body.options {
   border-radius: 14px;
   padding: 10px 12px;
   background: var(--bg);
+  box-shadow: 0 0 16px rgba(255, 30, 66, 0.08);
   margin-bottom: 10px;
 }
 
@@ -186,12 +179,13 @@ body.options {
 }
 
 .switch input:checked + .switch-track {
-  background: var(--fg);
-  border-color: var(--fg);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
 
 .switch input:checked + .switch-track .switch-thumb {
-  background: var(--bg);
+  background: #ffffff;
   transform: translateX(14px);
 }
 

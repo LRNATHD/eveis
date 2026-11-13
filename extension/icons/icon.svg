@@ -1,9 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#111111">
-  <style>
-    @media (prefers-color-scheme: dark) { :root { stroke: #e5e7eb; } }
-  </style>
-  <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" stroke-width="1.6"/>
-  <line x1="6.5" y1="8.5" x2="17.5" y2="8.5" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="8.5" y1="12" x2="15.5" y2="12" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="10.5" y1="15.5" x2="13.5" y2="15.5" stroke-width="1.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <rect x="2" y="2" width="20" height="20" rx="5.5" fill="#120508" stroke="#ff1e42" stroke-width="1.6"/>
+  <!-- Devil horns -->
+  <path d="M6.5 7.2L4.8 4.2L8.2 5.8" stroke="#ff1e42" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17.5 7.2L19.2 4.2L15.8 5.8" stroke="#ff1e42" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Inverted sieve (wider at bottom, pouring slop in) -->
+  <line x1="10.5" y1="8.5" x2="13.5" y2="8.5" stroke="#ff1e42" stroke-width="1.6" stroke-linecap="round"/>
+  <line x1="8.5" y1="12" x2="15.5" y2="12" stroke="#ff4d6d" stroke-width="1.6" stroke-linecap="round"/>
+  <line x1="6.5" y1="15.5" x2="17.5" y2="15.5" stroke="#ff7b00" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- Slop drip -->
+  <circle cx="12" cy="18.5" r="1.2" fill="#ff1e42"/>
 </svg>

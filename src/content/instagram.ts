@@ -1,186 +1,230 @@
-import { calmTitle } from "../core/dehype.js";
-import type { FeedItem, SieveConfig } from "../types.js";
+import { hypeTitle } from "../core/dehype.js";
+import type { SieveConfig } from "../types.js";
 import {
   applyHtmlFlags,
   bootSiteAdapter,
   createRafScheduler,
-  evaluateDomBatch,
-  pauseAllMedia,
-  rememberBounded,
+  parseCompactMetric,
 } from "./shared.js";
 
-const SPONSORED_LABELS = new Set(["ad", "sponsored", "paid partnership"]);
-const SUGGESTED_LABELS = new Set([
-  "suggested for you",
-  "suggested post",
-  "suggested posts",
-  "recommended for you",
-]);
-const ZERO_WIDTH_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
+const GOOD_REEL_RE =
+  /\b(?:tutorial|how\s+i\s+built|diy|engineering|physics|math|science|documentary|architecture|machining|woodworking|soldering|pcb|coding|programming|timelapse|process|restoration|cinematography)\b/i;
 
-let activeConfig: SieveConfig | null = null;
-const evaluatedIgPosts = new Set<string>();
+const NASTY_PALETTE = [
+  "#ff00ff",
+  "#00ff00",
+  "#ffff00",
+  "#00ffff",
+  "#ff5500",
+  "#9d00ff",
+  "#ff0077",
+  "#aaff00",
+  "#0066ff",
+  "#ff99cc",
+  "#ccff99",
+];
 
-function readHeaderLabels(article: HTMLElement): string[] {
-  const actionBoundary = article.querySelector("section");
-  if (!actionBoundary) return [];
-  const labels: string[] = [];
-  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
-  let node: Node | null;
-  let steps = 0;
-
-  while ((node = walker.nextNode()) && steps++ < 160) {
-    if (
-      !(
-        actionBoundary.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING
-      )
-    ) {
-      break;
-    }
-    const parent = node.parentElement;
-    if (!parent || parent.closest("a, button, [role='button'], figure, blockquote")) continue;
-    const clean = (node.nodeValue ?? "")
-      .replace(ZERO_WIDTH_RE, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-    if (clean && clean.length <= 36) labels.push(clean);
-  }
-  return labels;
+function pickNastyColor(): string {
+  return NASTY_PALETTE[Math.floor(Math.random() * NASTY_PALETTE.length)] ?? "#ff00ff";
 }
 
-function hasUnfollowedHeaderButton(article: HTMLElement): boolean {
-  const boundary = article.querySelector("section");
-  if (!boundary) return false;
-  for (const btn of article.querySelectorAll<HTMLElement>("button, [role='button']")) {
-    if (!(boundary.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_PRECEDING)) continue;
-    const label = (btn.textContent ?? "").trim().toLowerCase();
-    if (label === "follow") return true;
-  }
-  return false;
-}
-
-function hideHomeRightRail(main: HTMLElement, hideClutter: boolean): void {
-  if (!hideClutter) {
-    document.querySelectorAll<HTMLElement>('[data-sieve-ig-right-rail="1"]').forEach((el) => {
-      delete el.dataset.sieveIgRightRail;
-    });
-    return;
-  }
-
-  const markers = main.querySelectorAll<HTMLElement>(
-    'a[href*="/explore/people"], a[href*="about.instagram.com"], a[href*="/legal/terms"]',
+function nukeInstagramSidebar(): void {
+  const main = document.querySelector<HTMLElement>("main");
+  const navLinks = document.querySelectorAll<HTMLAnchorElement>(
+    'a[href="/direct/inbox/"], a[href="/explore/"], a[href="/reels/"], a[href="/"]',
   );
-  for (const marker of markers) {
-    let cur: HTMLElement | null = marker.parentElement;
+  for (const link of navLinks) {
+    if (main && main.contains(link)) continue;
+    let cur: HTMLElement | null = link.parentElement;
     let candidate: HTMLElement | null = null;
-    while (cur && cur !== main) {
-      if (cur.querySelector("article")) break;
+    while (cur && cur !== document.body) {
+      if (main && cur.contains(main)) break;
       const rect = cur.getBoundingClientRect();
-      if (rect.width >= 220 && rect.width <= 440) {
+      if (rect.width >= 40 && rect.width <= 380 && rect.height >= window.innerHeight * 0.5) {
         candidate = cur;
       }
       cur = cur.parentElement;
     }
-    if (candidate) {
-      candidate.dataset.sieveIgRightRail = "1";
+    if (candidate && !candidate.dataset.eveisIgSidebar) {
+      candidate.dataset.eveisIgSidebar = "1";
+      candidate.style.setProperty("display", "none", "important");
     }
   }
 }
 
-function calmRenderedCaptions(root: ParentNode): void {
+function randomizeReelColors(): void {
+  const main = document.querySelector<HTMLElement>("main");
+  if (document.body && !document.body.dataset.eveisColored) {
+    document.body.dataset.eveisColored = "1";
+    document.body.style.setProperty("background", pickNastyColor(), "important");
+  }
+  if (main && !main.dataset.eveisColored) {
+    main.dataset.eveisColored = "1";
+    main.style.setProperty("background", pickNastyColor(), "important");
+  }
+  document
+    .querySelectorAll<HTMLElement>(
+      "main span:not([data-eveis-colored]), main a:not([data-eveis-colored]), main h1:not([data-eveis-colored]), main div[dir='auto']:not([data-eveis-colored])",
+    )
+    .forEach((el) => {
+      if (el.childElementCount > 0) return;
+      el.dataset.eveisColored = "1";
+      el.style.setProperty("color", pickNastyColor(), "important");
+      el.style.setProperty("background-color", pickNastyColor(), "important");
+    });
+}
+
+const MIN_VIRAL_SLOP_LIKES = 10_000;
+
+let activeConfig: SieveConfig | null = null;
+const lockedVideos = new WeakSet<HTMLVideoElement>();
+const skippedVideos = new WeakSet<HTMLVideoElement>();
+let lastSkipAt = 0;
+
+function enforceReelsOnlyRoute(): void {
+  if (!activeConfig?.enabled || !activeConfig.instagram.enabled || !activeConfig.instagram.filterReels) {
+    return;
+  }
+  const path = window.location.pathname;
+  if (!path.startsWith("/reels") && !path.startsWith("/reel/")) {
+    window.location.replace("https://www.instagram.com/reels/");
+  }
+}
+
+function lockVideoAt4x(video: HTMLVideoElement): void {
+  try {
+    if (video.defaultPlaybackRate !== 4.0) video.defaultPlaybackRate = 4.0;
+    if (video.playbackRate !== 4.0) video.playbackRate = 4.0;
+  } catch {
+    // Ignore detached media elements.
+  }
+
+  if (lockedVideos.has(video)) return;
+  lockedVideos.add(video);
+
+  const snapTo4x = () => {
+    if (!activeConfig?.enabled || !activeConfig.instagram.enabled) return;
+    try {
+      if (video.defaultPlaybackRate !== 4.0) video.defaultPlaybackRate = 4.0;
+      if (video.playbackRate !== 4.0) video.playbackRate = 4.0;
+    } catch {
+      // Ignore playbackRate errors on unloaded media.
+    }
+  };
+
+  video.addEventListener("ratechange", snapTo4x);
+  video.addEventListener("play", snapTo4x);
+  video.addEventListener("playing", snapTo4x);
+  video.addEventListener("loadedmetadata", snapTo4x);
+}
+
+function findReelContainer(video: HTMLVideoElement): HTMLElement | null {
+  let cur: HTMLElement | null = video.parentElement;
+  while (cur && cur !== document.body) {
+    const rect = cur.getBoundingClientRect();
+    if (rect.height >= window.innerHeight * 0.55 && cur.querySelector("svg")) {
+      return cur;
+    }
+    cur = cur.parentElement;
+  }
+  return video.parentElement;
+}
+
+function readReelLikes(container: HTMLElement): number | null {
+  const likeSvg = container.querySelector<HTMLElement>(
+    'svg[aria-label="Like"], svg[aria-label="Unlike"]',
+  );
+  const likeBtn = likeSvg?.closest<HTMLElement>('[role="button"], button');
+  if (!likeBtn) return null;
+
+  const parent = likeBtn.parentElement;
+  if (!parent) return null;
+
+  for (const el of parent.querySelectorAll<HTMLElement>("span, a")) {
+    const txt = (el.textContent ?? "").trim();
+    if (/^\d+(?:[.,]\d+)?\s*[kmb]?$/i.test(txt)) {
+      return parseCompactMetric(txt);
+    }
+  }
+  return null;
+}
+
+function skipCurrentReel(): void {
+  const now = Date.now();
+  if (now - lastSkipAt < 450) return;
+  lastSkipAt = now;
+
+  const nextBtn = document.querySelector<HTMLElement>(
+    'button[aria-label*="Next"], [role="button"][aria-label*="Next"]',
+  );
+  if (nextBtn) {
+    nextBtn.click();
+    return;
+  }
+
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", keyCode: 40, bubbles: true }),
+  );
+  window.scrollBy({ top: window.innerHeight * 0.85, behavior: "auto" });
+}
+
+function maybeSkipLowSlopReels(): void {
+  if (!activeConfig?.enabled || !activeConfig.instagram.enabled || !activeConfig.instagram.caliberFilter) {
+    return;
+  }
+
+  for (const video of document.querySelectorAll<HTMLVideoElement>("video")) {
+    lockVideoAt4x(video);
+    if (skippedVideos.has(video)) continue;
+
+    const rect = video.getBoundingClientRect();
+    const visible = rect.height > 100 && rect.top < window.innerHeight * 0.7 && rect.bottom > window.innerHeight * 0.3;
+    if (!visible) continue;
+
+    const container = findReelContainer(video);
+    if (!container) continue;
+
+    const likes = readReelLikes(container);
+    const captionText = (container.textContent ?? "").slice(0, 600);
+    const isGoodOrSmall =
+      GOOD_REEL_RE.test(captionText) || (likes !== null && likes < MIN_VIRAL_SLOP_LIKES);
+
+    if (isGoodOrSmall) {
+      skippedVideos.add(video);
+      video.muted = true;
+      video.pause();
+      skipCurrentReel();
+      break;
+    }
+  }
+}
+
+function hypeRenderedCaptions(root: ParentNode): void {
   root
-    .querySelectorAll<HTMLElement>("h1:not([data-sieve-calm]), span:not([data-sieve-calm])")
+    .querySelectorAll<HTMLElement>("h1:not([data-eveis-hype]), span:not([data-eveis-hype])")
     .forEach((el) => {
       if (el.childElementCount > 0) return;
       const raw = el.textContent;
-      if (!raw || raw.length < 12) return;
-      el.dataset.sieveCalm = "1";
-      const calmed = calmTitle(raw);
-      if (calmed !== raw) el.textContent = calmed;
+      if (!raw || raw.length < 16) return;
+      el.dataset.eveisHype = "1";
+      const hyped = hypeTitle(raw);
+      if (hyped !== raw) el.textContent = hyped;
     });
-}
-
-async function evaluateUnfollowedHomeArticles(main: HTMLElement): Promise<void> {
-  if (!activeConfig?.instagram.caliberFilter) return;
-  const batch: FeedItem[] = [];
-  const articleById = new Map<string, HTMLElement>();
-
-  main.querySelectorAll<HTMLElement>("article:not([data-sieve-hidden])").forEach((article, idx) => {
-    if (article.parentElement?.closest("article")) return;
-    if (!hasUnfollowedHeaderButton(article)) return;
-
-    const postLink = article.querySelector<HTMLAnchorElement>('a[href^="/p/"], a[href^="/reel/"]');
-    const href = postLink?.getAttribute("href") ?? "";
-    const authorLink = article.querySelector<HTMLAnchorElement>('a[href^="/"]');
-    const handle =
-      authorLink?.getAttribute("href")?.replace(/^\/|\/$/g, "").split("/")[0] ?? undefined;
-    const text = article.textContent?.replace(/\s+/g, " ").trim().slice(0, 220) ?? "";
-    const id = href || `ig_dom_${idx}_${text.slice(0, 24)}`;
-    if (!id || !rememberBounded(evaluatedIgPosts, id)) return;
-
-    articleById.set(id, article);
-    batch.push({
-      platform: "instagram",
-      id,
-      creatorHandle: handle,
-      isFollowed: false,
-      surface: "timeline",
-      titleOrText: text,
-    });
-  });
-
-  await evaluateDomBatch(batch, (dropId) => {
-    const article = articleById.get(dropId);
-    if (article) {
-      article.dataset.sieveHidden = "1";
-      pauseAllMedia(article);
-    }
-  });
 }
 
 function sweepInstagramDom(): void {
-  const path = window.location.pathname;
   const igOn = Boolean(activeConfig?.enabled && activeConfig.instagram.enabled);
+  if (!igOn) return;
+
+  enforceReelsOnlyRoute();
+  nukeInstagramSidebar();
+  maybeSkipLowSlopReels();
+  randomizeReelColors();
+
   const main = document.querySelector<HTMLElement>('main[role="main"], main');
-
-  if (!igOn || !main) {
-    document
-      .querySelectorAll<HTMLElement>('[data-sieve-hidden="1"], [data-sieve-ig-right-rail="1"]')
-      .forEach((el) => {
-        delete el.dataset.sieveHidden;
-        delete el.dataset.sieveIgRightRail;
-      });
-    return;
+  if (main) {
+    hypeRenderedCaptions(main);
   }
-
-  calmRenderedCaptions(main);
-
-  if (path !== "/" && path !== "") {
-    document.querySelectorAll<HTMLElement>('[data-sieve-ig-right-rail="1"]').forEach((el) => {
-      delete el.dataset.sieveIgRightRail;
-    });
-    return;
-  }
-
-  hideHomeRightRail(main, Boolean(activeConfig?.instagram.hideClutter));
-
-  main.querySelectorAll<HTMLElement>("article").forEach((article) => {
-    if (article.parentElement?.closest("article")) return;
-    const labels = readHeaderLabels(article);
-    const isAd = labels.some((t) => SPONSORED_LABELS.has(t));
-    const isSuggested =
-      activeConfig?.instagram.hideClutter && labels.some((t) => SUGGESTED_LABELS.has(t));
-
-    if (isAd || isSuggested) {
-      article.dataset.sieveHidden = "1";
-      pauseAllMedia(article);
-    } else if (article.dataset.sieveHidden) {
-      delete article.dataset.sieveHidden;
-    }
-  });
-
-  void evaluateUnfollowedHomeArticles(main);
 }
 
 const scheduleSweep = createRafScheduler(sweepInstagramDom);
@@ -189,8 +233,8 @@ bootSiteAdapter((cfg) => {
   activeConfig = cfg;
   const igOn = cfg.enabled && cfg.instagram.enabled;
   applyHtmlFlags({
-    sieveIgOn: igOn ? "1" : "0",
-    sieveIgClutter: igOn && cfg.instagram.hideClutter ? "1" : "0",
+    eveisIgOn: igOn ? "1" : "0",
+    eveisIgClutter: igOn && cfg.instagram.hideClutter ? "1" : "0",
   });
   scheduleSweep();
 });
@@ -206,3 +250,10 @@ const observer = new MutationObserver(() => {
 if (document.documentElement) {
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
+
+setInterval(() => {
+  if (activeConfig?.enabled && activeConfig.instagram.enabled) {
+    enforceReelsOnlyRoute();
+    maybeSkipLowSlopReels();
+  }
+}, 250);

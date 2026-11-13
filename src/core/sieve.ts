@@ -51,35 +51,21 @@ export function creatorKeysFor(item: FeedItem): string[] {
   return keys;
 }
 
-export function evaluateLocalTiers(
+export function isBrainrotItem(
   item: FeedItem,
   config: SieveConfig,
   seeds: SeedSets,
-  memory: MemoryLookup,
   novelty?: NoveltyLookup,
-): Verdict {
-  if (item.isSponsored) return "drop";
+): boolean {
+  if (item.isSponsored) return true;
 
   const keys = creatorKeysFor(item);
-  if (config.blockHandles.length > 0) {
-    const blocked = new Set(config.blockHandles.map((h) => normalizeHandle(h)).filter(Boolean));
-    if (keys.some((k) => blocked.has(k))) return "drop";
-  }
-
   if (config.allowHandles.length > 0) {
     const allowed = new Set(config.allowHandles.map((h) => normalizeHandle(h)).filter(Boolean));
-    if (keys.some((k) => allowed.has(k))) return "keep";
+    if (keys.some((k) => allowed.has(k))) return true;
   }
 
-  if (config.passFollowed && item.isFollowed) return "keep";
-
-  if (item.platform === "youtube" && seeds.hnVideos.has(item.id)) return "keep";
-  if (keys.some((k) => seeds.hnChannels.has(k))) return "keep";
-
-  const ytIds = item.linkedYoutubeIds ?? extractYouTubeIdsFromText(item.titleOrText);
-  if (ytIds.some((vid) => seeds.hnVideos.has(vid))) return "keep";
-
-  if (keys.some((k) => seeds.slopChannels.has(k))) return "drop";
+  if (keys.some((k) => seeds.slopChannels.has(k))) return true;
 
   const fullText = `${item.titleOrText} ${item.secondaryText ?? ""}`;
   if (
@@ -89,20 +75,55 @@ export function evaluateLocalTiers(
     ATTENTION_TRAP_RE.test(fullText) ||
     GOSSIP_DOMAIN_RE.test(fullText)
   ) {
-    return "drop";
+    return true;
   }
 
-  if (!item.isFollowed) {
-    if (item.platform === "x" && config.x.slopCadenceFilter) {
-      if (isStructuralSlop(item.titleOrText, {}, 65)) return "drop";
-    } else if (item.platform !== "youtube") {
-      if (isStructuralSlop(item.titleOrText, {}, 74)) return "drop";
-    }
+  if (item.platform === "x" && config.x.slopCadenceFilter) {
+    if (isStructuralSlop(item.titleOrText, {}, 55)) return true;
+  } else if (isStructuralSlop(item.titleOrText, {}, 65)) {
+    return true;
+  }
 
-    if (config.noveltyFilter && novelty?.isRedundantRehash(item.titleOrText)) {
-      return "drop";
+  if (config.noveltyFilter && novelty?.isRedundantRehash(item.titleOrText)) {
+    return true;
+  }
+
+  if (item.platform === "x" && item.metrics) {
+    const likes = item.metrics.likes ?? 0;
+    const replies = item.metrics.replies ?? 0;
+    const quotes = item.metrics.quotes ?? 0;
+    if (replies >= 30 && (replies > likes * 1.2 || quotes > likes * 1.0)) {
+      return true;
     }
   }
+
+  return false;
+}
+
+export function evaluateLocalTiers(
+  item: FeedItem,
+  config: SieveConfig,
+  seeds: SeedSets,
+  memory: MemoryLookup,
+  novelty?: NoveltyLookup,
+): Verdict {
+  const keys = creatorKeysFor(item);
+  if (config.blockHandles.length > 0) {
+    const blocked = new Set(config.blockHandles.map((h) => normalizeHandle(h)).filter(Boolean));
+    if (keys.some((k) => blocked.has(k))) return "drop";
+  }
+
+  // Evil mode: boost all slop, ads, bait, drama, and brainrot!
+  if (isBrainrotItem(item, config, seeds, novelty)) return "keep";
+
+  // Suppress boring high-caliber craft / HackerTube videos unless explicitly followed & passed.
+  if (config.passFollowed && item.isFollowed) return "keep";
+
+  if (item.platform === "youtube" && seeds.hnVideos.has(item.id)) return "drop";
+  if (keys.some((k) => seeds.hnChannels.has(k))) return "drop";
+
+  const ytIds = item.linkedYoutubeIds ?? extractYouTubeIdsFromText(item.titleOrText);
+  if (ytIds.some((vid) => seeds.hnVideos.has(vid))) return "drop";
 
   const cachedVerdict = memory.getItemVerdict(item.platform, item.id);
   if (cachedVerdict) return cachedVerdict;
@@ -112,40 +133,41 @@ export function evaluateLocalTiers(
     if (learned) return learned;
   }
 
-  if (item.platform === "x" && !item.isFollowed && item.metrics) {
-    const likes = item.metrics.likes ?? 0;
-    const replies = item.metrics.replies ?? 0;
-    const quotes = item.metrics.quotes ?? 0;
-    if (replies >= 40 && (replies > likes * 1.4 || quotes > likes * 1.1)) {
-      return "drop";
-    }
-  }
-
   return "uncertain";
 }
 
-export async function runSieveOnBatch(
+export interface BatchVerdicts {
+  dropped: Set<string>;
+  boosted: Set<string>;
+}
+
+export async function classifySieveBatch(
   items: FeedItem[],
   config: SieveConfig,
   seeds: SeedSets,
   memory: MemoryStore,
   fetchImpl: typeof fetch = fetch,
   novelty?: NoveltyLookup,
-): Promise<Set<string>> {
-  const droppedIds = new Set<string>();
+): Promise<BatchVerdicts> {
+  const dropped = new Set<string>();
+  const boosted = new Set<string>();
   const uncertain: FeedItem[] = [];
 
   for (const item of items) {
+    if (isBrainrotItem(item, config, seeds, novelty)) {
+      boosted.add(item.id);
+      continue;
+    }
     const localVerdict = evaluateLocalTiers(item, config, seeds, memory, novelty);
     if (localVerdict === "drop") {
-      droppedIds.add(item.id);
+      dropped.add(item.id);
     } else if (localVerdict === "uncertain") {
       uncertain.push(item);
     }
   }
 
   if (uncertain.length === 0 || config.grader.mode === "off") {
-    return droppedIds;
+    return { dropped, boosted };
   }
 
   const holdMs = Math.max(50, config.grader.streamHoldMs || DEFAULT_CONFIG.grader.streamHoldMs);
@@ -170,8 +192,20 @@ export async function runSieveOnBatch(
   if (timer) clearTimeout(timer);
 
   if (outcome !== timedOut) {
-    for (const id of outcome) droppedIds.add(id);
+    for (const id of outcome) dropped.add(id);
   }
 
-  return droppedIds;
+  return { dropped, boosted };
+}
+
+export async function runSieveOnBatch(
+  items: FeedItem[],
+  config: SieveConfig,
+  seeds: SeedSets,
+  memory: MemoryStore,
+  fetchImpl: typeof fetch = fetch,
+  novelty?: NoveltyLookup,
+): Promise<Set<string>> {
+  const { dropped } = await classifySieveBatch(items, config, seeds, memory, fetchImpl, novelty);
+  return dropped;
 }
